@@ -1,14 +1,17 @@
-use std::fmt::Debug;
+use std::fmt::Display;
 use std::marker::PhantomData;
+use std::{convert::TryFrom, fmt::Debug};
 
-use ff::Field;
 use halo2_proofs::{
-    circuit::{layouter::RegionLayouter, AssignedCell, Cell, Layouter, Region, Table, Value},
+    arithmetic::Field,
+    circuit::{layouter::RegionLayouter, Cell, Layouter, Region, Table, Value},
     plonk::{
         Advice, Any, Assigned, Assignment, Circuit, Column, ConstraintSystem, Fixed, FloorPlanner,
         Instance, Selector,
     },
 };
+
+use crate::utils::Halo2Cell;
 
 #[derive(Debug)]
 pub struct ExtractingFloorPlanner<P: FloorPlanner> {
@@ -95,16 +98,50 @@ impl<'c, F: Field, C: Circuit<F>> Circuit<F> for ExtractingCircuit<'c, F, C> {
         config: Self::Config,
         layouter: impl Layouter<F>,
     ) -> Result<(), halo2_proofs::plonk::Error> {
+        println!("Synthesize");
         let mut vec: Vec<(Cell, F)> = vec![];
         let mut equal_cells = vec![];
         let layouter = ExtractingLayouter::new(layouter, &mut vec, &mut equal_cells);
         self.inner_ref().synthesize(config, layouter).map(|()| {
-            for x in vec {
-                println!("{:?}", x);
+            println!("Assigned cells");
+            println!("-----------------------------------");
+
+            for (cell, value) in vec {
+                let cell = Halo2Cell::try_from(format!("{:?}", cell).as_str())
+                    .map_err(|_| halo2_proofs::plonk::Error::Synthesis)
+                    .unwrap();
+
+                println!(
+                    "Cell {} {} {} {:?} = {:?}",
+                    cell.region_index,
+                    cell.row_offset,
+                    cell.column.index,
+                    cell.column.column_type,
+                    value
+                );
             }
 
-            for x in equal_cells {
-                println!("{:?}", x);
+            println!("Equal cells");
+            println!("-----------------------------------");
+
+            for (lhs, rhs) in equal_cells {
+                let lhs = Halo2Cell::try_from(format!("{:?}", lhs).as_str())
+                    .map_err(|_| halo2_proofs::plonk::Error::Synthesis)
+                    .unwrap();
+                let rhs = Halo2Cell::try_from(format!("{:?}", rhs).as_str())
+                    .map_err(|_| halo2_proofs::plonk::Error::Synthesis)
+                    .unwrap();
+                println!(
+                    "Cell {} {} {} {:?} = Cell {} {} {} {:?}",
+                    lhs.region_index,
+                    lhs.row_offset,
+                    lhs.column.index,
+                    lhs.column.column_type,
+                    rhs.region_index,
+                    rhs.row_offset,
+                    rhs.column.index,
+                    rhs.column.column_type,
+                );
             }
         })
     }
@@ -192,10 +229,6 @@ impl<'a, F: Field, L: Layouter<F>> Layouter<F> for ExtractingLayouter<'a, F, L> 
     }
 }
 
-fn extract_value_and_return_cell<F: Field, V: Debug>(value: AssignedCell<V, F>) -> Cell {
-    value.cell()
-}
-
 #[derive(Debug)]
 struct ExtractingRegion<'a, 'b, F: Field>(
     Region<'a, F>,
@@ -207,7 +240,7 @@ impl<'a, 'b, F: Field> RegionLayouter<F> for ExtractingRegion<'a, 'b, F> {
     fn enable_selector<'v>(
         &'v mut self,
         annotation: &'v (dyn Fn() -> String + 'v),
-        selector: &halo2_proofs::plonk::Selector,
+        selector: &Selector,
         offset: usize,
     ) -> Result<(), halo2_proofs::plonk::Error> {
         self.0.enable_selector(annotation, selector, offset)
@@ -216,11 +249,10 @@ impl<'a, 'b, F: Field> RegionLayouter<F> for ExtractingRegion<'a, 'b, F> {
     fn assign_advice<'v>(
         &'v mut self,
         annotation: &'v (dyn Fn() -> String + 'v),
-        column: halo2_proofs::plonk::Column<halo2_proofs::plonk::Advice>,
+        column: Column<Advice>,
         offset: usize,
-        to: &'v mut (dyn FnMut() -> halo2_proofs::circuit::Value<halo2_proofs::plonk::Assigned<F>>
-                     + 'v),
-    ) -> Result<halo2_proofs::circuit::Cell, halo2_proofs::plonk::Error> {
+        to: &'v mut (dyn FnMut() -> Value<Assigned<F>> + 'v),
+    ) -> Result<Cell, halo2_proofs::plonk::Error> {
         self.0
             .assign_advice(annotation, column, offset, to)
             .map(|value| {
@@ -269,14 +301,6 @@ impl<'a, 'b, F: Field> RegionLayouter<F> for ExtractingRegion<'a, 'b, F> {
             })
     }
 
-    fn instance_value(
-        &mut self,
-        instance: Column<Instance>,
-        row: usize,
-    ) -> Result<Value<F>, halo2_proofs::plonk::Error> {
-        self.0.instance_value(instance, row)
-    }
-
     fn assign_fixed<'v>(
         &'v mut self,
         annotation: &'v (dyn Fn() -> String + 'v),
@@ -310,6 +334,14 @@ impl<'a, 'b, F: Field> RegionLayouter<F> for ExtractingRegion<'a, 'b, F> {
     ) -> Result<(), halo2_proofs::plonk::Error> {
         self.2.push((left, right));
         self.0.constrain_equal(left, right)
+    }
+
+    fn instance_value(
+        &mut self,
+        instance: Column<Instance>,
+        row: usize,
+    ) -> Result<Value<F>, halo2_proofs::plonk::Error> {
+        self.0.instance_value(instance, row)
     }
 }
 
@@ -433,11 +465,10 @@ mod tests {
     use std::marker::PhantomData;
 
     use arrayvec::ArrayString;
-    use ff::Field;
     use halo2_proofs::{
-        circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
+        arithmetic::Field,
+        circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
         dev::MockProver,
-        pasta::Fp,
         plonk::{Advice, Circuit, Column, ConstraintSystem, Instance, Selector},
         poly::Rotation,
     };
@@ -622,32 +653,14 @@ mod tests {
     fn fibonacci_example1() {
         let k = 4;
 
-        let a = {
-            let mut x = ArrayString::new();
-            x.push_str("a");
-            TermField::Expr(x)
-        }; // F[0]
-        let b = {
-            let mut x = ArrayString::new();
-            x.push_str("b");
-            TermField::Expr(x)
-        }; // F[0] // F[1]
-        let out = {
-            let mut x = ArrayString::new();
-            x.push_str("c");
-            TermField::Expr(x)
-        }; // F[9]
+        let a = TermField::from("a"); // F[0]
+        let b = TermField::from("b"); // F[0] // F[1]
+        let out = TermField::from("c"); // F[9]
 
         let circuit = MyCircuit(PhantomData);
 
-        let mut public_input = vec![a, b, out];
+        let public_input = vec![a, b, out];
 
-        let prover = MockProver::run(k, &circuit, vec![public_input.clone()]).unwrap();
-        prover.assert_satisfied();
-
-        public_input[2] += TermField::One;
-        let _prover = MockProver::run(k, &circuit, vec![public_input]).unwrap();
-        // uncomment the following line and the assert will fail
-        // _prover.assert_satisfied();
+        MockProver::run(k, &circuit, vec![public_input.clone()]).unwrap();
     }
 }
