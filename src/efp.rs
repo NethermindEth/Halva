@@ -1,343 +1,72 @@
-use std::fmt::Debug;
+use std::convert::TryFrom;
+use std::fmt::Display;
 use std::marker::PhantomData;
 
-use ff::Field;
+use halo2_proofs::dev::CircuitGates;
+use halo2_proofs::plonk::{Circuit, ColumnType};
 use halo2_proofs::{
-    circuit::{layouter::RegionLayouter, AssignedCell, Cell, Layouter, Region, Table, Value},
-    plonk::{
-        Advice, Any, Assigned, Assignment, Circuit, Column, ConstraintSystem, Fixed, FloorPlanner,
-        Instance, Selector,
-    },
+    arithmetic::Field,
+    circuit::Value,
+    plonk::{Advice, Any, Assigned, Assignment, Column, Fixed, Instance, Selector},
 };
 
-#[derive(Debug)]
-pub struct ExtractingFloorPlanner<P: FloorPlanner> {
-    _marker: PhantomData<P>,
+use crate::utils::{Halo2Column, Halo2Selector};
+
+pub enum Target {
+    Constraints,
+    AdviceGenerator,
 }
 
-impl<P: FloorPlanner> FloorPlanner for ExtractingFloorPlanner<P> {
-    fn synthesize<F: Field, CS: Assignment<F>, C: Circuit<F>>(
-        cs: &mut CS,
-        circuit: &C,
-        config: C::Config,
-        constants: Vec<Column<Fixed>>,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
-        P::synthesize(
-            &mut ExtractingAssignment::new(cs),
-            &ExtractingCircuit::borrowed(circuit),
-            config,
-            constants,
-        )
-    }
-}
-
-pub enum ExtractingCircuit<'c, F: Field, C: Circuit<F>> {
-    Borrowed {
-        circuit: &'c C,
-        assignment: Vec<(Cell, F)>,
-    },
-    Owned {
-        circuit: C,
-        assignment: Vec<(Cell, F)>,
-    },
-}
-
-impl<'c, F: Field, C: Circuit<F>> ExtractingCircuit<'c, F, C> {
-    fn borrowed(circuit: &'c C) -> Self {
-        Self::Borrowed {
-            circuit,
-            assignment: vec![],
-        }
-    }
-
-    fn owned(circuit: C) -> Self {
-        Self::Owned {
-            circuit,
-            assignment: vec![],
-        }
-    }
-
-    fn inner_ref(&self) -> &C {
-        match self {
-            ExtractingCircuit::Borrowed { circuit, .. } => circuit,
-            ExtractingCircuit::Owned { circuit, .. } => circuit,
-        }
-    }
-
-    pub fn assignment(&self) -> &Vec<(Cell, F)> {
-        match self {
-            ExtractingCircuit::Borrowed {
-                circuit: _circuit,
-                assignment,
-            } => assignment,
-            ExtractingCircuit::Owned {
-                circuit: _circuit,
-                assignment,
-            } => assignment,
-        }
-    }
-}
-
-impl<'c, F: Field, C: Circuit<F>> Circuit<F> for ExtractingCircuit<'c, F, C> {
-    type Config = C::Config;
-    type FloorPlanner = C::FloorPlanner;
-
-    fn without_witnesses(&self) -> Self {
-        Self::owned(self.inner_ref().without_witnesses())
-    }
-
-    fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        C::configure(meta)
-    }
-
-    fn synthesize(
-        &self,
-        config: Self::Config,
-        layouter: impl Layouter<F>,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
-        let mut vec: Vec<(Cell, F)> = vec![];
-        let mut equal_cells = vec![];
-        let layouter = ExtractingLayouter::new(layouter, &mut vec, &mut equal_cells);
-        self.inner_ref().synthesize(config, layouter).map(|()| {
-            for x in vec {
-                println!("{:?}", x);
-            }
-
-            for x in equal_cells {
-                println!("{:?}", x);
-            }
-        })
-    }
-}
-
-struct ExtractingLayouter<'a, F: Field, L: Layouter<F>> {
-    layouter: L,
-    assigned_values: &'a mut Vec<(Cell, F)>,
-    equal_cells: &'a mut Vec<(Cell, Cell)>,
-}
-
-impl<'a, F: Field, L: Layouter<F>> ExtractingLayouter<'a, F, L> {
-    fn new(
-        layouter: L,
-        assigned_values: &'a mut Vec<(Cell, F)>,
-        equal_cells: &'a mut Vec<(Cell, Cell)>,
-    ) -> Self {
-        Self {
-            layouter,
-            assigned_values,
-            equal_cells,
-        }
-    }
-}
-
-impl<'a, F: Field, L: Layouter<F>> Layouter<F> for ExtractingLayouter<'a, F, L> {
-    type Root = Self;
-
-    fn assign_region<A, AR, N, NR>(
-        &mut self,
-        name: N,
-        mut assignment: A,
-    ) -> Result<AR, halo2_proofs::plonk::Error>
-    where
-        A: FnMut(Region<'_, F>) -> Result<AR, halo2_proofs::plonk::Error>,
-        N: Fn() -> NR,
-        NR: Into<String>,
-    {
-        let layouter = &mut self.layouter;
-        let eqs = &mut self.assigned_values;
-        let cell_eqs = &mut self.equal_cells;
-        layouter.assign_region(name, |region| {
-            let mut region = ExtractingRegion(region, *eqs, *cell_eqs);
-            let region: &mut dyn RegionLayouter<F> = &mut region;
-            assignment(region.into())
-        })
-    }
-
-    fn assign_table<A, N, NR>(
-        &mut self,
-        name: N,
-        assignment: A,
-    ) -> Result<(), halo2_proofs::plonk::Error>
-    where
-        A: FnMut(Table<'_, F>) -> Result<(), halo2_proofs::plonk::Error>,
-        N: Fn() -> NR,
-        NR: Into<String>,
-    {
-        self.layouter.assign_table(name, assignment)
-    }
-
-    fn constrain_instance(
-        &mut self,
-        cell: Cell,
-        column: Column<Instance>,
-        row: usize,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
-        self.layouter.constrain_instance(cell, column, row)
-    }
-
-    fn get_root(&mut self) -> &mut Self::Root {
-        self
-    }
-
-    fn push_namespace<NR, N>(&mut self, name_fn: N)
-    where
-        NR: Into<String>,
-        N: FnOnce() -> NR,
-    {
-        self.layouter.push_namespace(name_fn);
-    }
-
-    fn pop_namespace(&mut self, gadget_name: Option<String>) {
-        self.layouter.pop_namespace(gadget_name)
-    }
-}
-
-fn extract_value_and_return_cell<F: Field, V: Debug>(value: AssignedCell<V, F>) -> Cell {
-    value.cell()
-}
-
-#[derive(Debug)]
-struct ExtractingRegion<'a, 'b, F: Field>(
-    Region<'a, F>,
-    &'b mut Vec<(Cell, F)>,
-    &'b mut Vec<(Cell, Cell)>,
-);
-
-impl<'a, 'b, F: Field> RegionLayouter<F> for ExtractingRegion<'a, 'b, F> {
-    fn enable_selector<'v>(
-        &'v mut self,
-        annotation: &'v (dyn Fn() -> String + 'v),
-        selector: &halo2_proofs::plonk::Selector,
-        offset: usize,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
-        self.0.enable_selector(annotation, selector, offset)
-    }
-
-    fn assign_advice<'v>(
-        &'v mut self,
-        annotation: &'v (dyn Fn() -> String + 'v),
-        column: halo2_proofs::plonk::Column<halo2_proofs::plonk::Advice>,
-        offset: usize,
-        to: &'v mut (dyn FnMut() -> halo2_proofs::circuit::Value<halo2_proofs::plonk::Assigned<F>>
-                     + 'v),
-    ) -> Result<halo2_proofs::circuit::Cell, halo2_proofs::plonk::Error> {
-        self.0
-            .assign_advice(annotation, column, offset, to)
-            .map(|value| {
-                value.value().and_then(|v| {
-                    self.1.push((value.cell(), v.evaluate()));
-                    Value::known(())
-                });
-                value.cell()
-            })
-    }
-
-    fn assign_advice_from_constant<'v>(
-        &'v mut self,
-        annotation: &'v (dyn Fn() -> String + 'v),
-        column: halo2_proofs::plonk::Column<halo2_proofs::plonk::Advice>,
-        offset: usize,
-        constant: halo2_proofs::plonk::Assigned<F>,
-    ) -> Result<halo2_proofs::circuit::Cell, halo2_proofs::plonk::Error> {
-        self.0
-            .assign_advice_from_constant(annotation, column, offset, constant)
-            .map(|value| {
-                value.value().and_then(|v| {
-                    self.1.push((value.cell(), v.evaluate()));
-                    Value::known(())
-                });
-                value.cell()
-            })
-    }
-
-    fn assign_advice_from_instance<'v>(
-        &mut self,
-        annotation: &'v (dyn Fn() -> String + 'v),
-        instance: Column<Instance>,
-        row: usize,
-        advice: Column<Advice>,
-        offset: usize,
-    ) -> Result<(Cell, Value<F>), halo2_proofs::plonk::Error> {
-        self.0
-            .assign_advice_from_instance(annotation, instance, row, advice, offset)
-            .map(|value| {
-                value.value().and_then(|v| {
-                    self.1.push((value.cell(), *v));
-                    Value::known(())
-                });
-                (value.cell(), value.value().cloned())
-            })
-    }
-
-    fn instance_value(
-        &mut self,
-        instance: Column<Instance>,
-        row: usize,
-    ) -> Result<Value<F>, halo2_proofs::plonk::Error> {
-        self.0.instance_value(instance, row)
-    }
-
-    fn assign_fixed<'v>(
-        &'v mut self,
-        annotation: &'v (dyn Fn() -> String + 'v),
-        column: Column<Fixed>,
-        offset: usize,
-        to: &'v mut (dyn FnMut() -> Value<Assigned<F>> + 'v),
-    ) -> Result<Cell, halo2_proofs::plonk::Error> {
-        self.0
-            .assign_fixed(annotation, column, offset, to)
-            .map(|value| {
-                value.value().and_then(|v| {
-                    self.1.push((value.cell(), v.evaluate()));
-                    Value::known(())
-                });
-                value.cell()
-            })
-    }
-
-    fn constrain_constant(
-        &mut self,
-        cell: Cell,
-        constant: Assigned<F>,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
-        self.0.constrain_constant(cell, constant)
-    }
-
-    fn constrain_equal(
-        &mut self,
-        left: Cell,
-        right: Cell,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
-        self.2.push((left, right));
-        self.0.constrain_equal(left, right)
-    }
-}
-
-struct ExtractingAssignment<'cs, F: Field, CS: Assignment<F>> {
-    cs: &'cs mut CS,
+pub struct ExtractingAssignment<F: Field> {
     _marker: PhantomData<F>,
+    current_region: Option<String>,
+    target: Target,
 }
 
-impl<'cs, F: Field, CS: Assignment<F>> ExtractingAssignment<'cs, F, CS> {
-    fn new(cs: &'cs mut CS) -> Self {
+impl<F: Field> ExtractingAssignment<F> {
+    pub fn new(target: Target) -> Self {
         Self {
-            cs,
             _marker: PhantomData,
+            current_region: None,
+            target: target,
+        }
+    }
+
+    fn format_cell<T>(col: Column<T>) -> String
+    where
+        T: ColumnType,
+    {
+        let parsed_column = Halo2Column::try_from(format!("{:?}", col).as_str()).unwrap();
+        format!("{:?} {}", parsed_column.column_type, parsed_column.index)
+    }
+
+    fn print_annotation(annotation: String) {
+        if !annotation.is_empty() {
+            println!("--{}", annotation);
         }
     }
 }
 
-impl<'cs, F: Field, CS: Assignment<F>> Assignment<F> for ExtractingAssignment<'cs, F, CS> {
+impl<F: Field + From<String>> Assignment<F> for ExtractingAssignment<F>
+where
+    F: Display,
+{
     fn enter_region<NR, N>(&mut self, name_fn: N)
     where
         NR: Into<String>,
         N: FnOnce() -> NR,
     {
-        self.cs.enter_region(name_fn);
+        let x: String = name_fn().into();
+        println!("--REGION: {x}");
+        self.current_region = Some(x.clone());
     }
 
     fn exit_region(&mut self) {
-        self.cs.exit_region();
+        println!(
+            "--EXITTED REGION: {}",
+            self.current_region.as_ref().unwrap()
+        );
+        self.current_region = None;
     }
 
     fn enable_selector<A, AR>(
@@ -350,8 +79,10 @@ impl<'cs, F: Field, CS: Assignment<F>> Assignment<F> for ExtractingAssignment<'c
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        let annotation = annotation().into();
-        self.cs.enable_selector(|| annotation, selector, row)
+        Self::print_annotation(annotation().into());
+        let halo2_selector = Halo2Selector::try_from(format!("{:?}", selector).as_str()).unwrap();
+        println!("EnableSelector {} {}", halo2_selector.0, row);
+        Ok(())
     }
 
     fn query_instance(
@@ -359,7 +90,11 @@ impl<'cs, F: Field, CS: Assignment<F>> Assignment<F> for ExtractingAssignment<'c
         column: Column<Instance>,
         row: usize,
     ) -> Result<Value<F>, halo2_proofs::plonk::Error> {
-        self.cs.query_instance(column, row)
+        Ok(Value::known(F::from(format!(
+            "{} {}",
+            Self::format_cell(column),
+            row
+        ))))
     }
 
     fn assign_advice<V, VR, A, AR>(
@@ -375,8 +110,21 @@ impl<'cs, F: Field, CS: Assignment<F>> Assignment<F> for ExtractingAssignment<'c
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        let annotation = annotation().into();
-        self.cs.assign_advice(|| annotation, column, row, to)
+        match self.target {
+            Target::Constraints => Ok(()),
+            Target::AdviceGenerator => {
+                Self::print_annotation(annotation().into());
+                to().map(|v| {
+                    println!(
+                        "{} {} = {}",
+                        Self::format_cell(column),
+                        row,
+                        v.into().evaluate()
+                    );
+                });
+                Ok(())
+            }
+        }
     }
 
     fn assign_fixed<V, VR, A, AR>(
@@ -392,8 +140,16 @@ impl<'cs, F: Field, CS: Assignment<F>> Assignment<F> for ExtractingAssignment<'c
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        let annotation = annotation().into();
-        self.cs.assign_fixed(|| annotation, column, row, to)
+        Self::print_annotation(annotation().into());
+        to().map(|v| {
+            println!(
+                "{} {} = {}",
+                Self::format_cell(column),
+                row,
+                v.into().evaluate()
+            );
+        });
+        Ok(())
     }
 
     fn copy(
@@ -403,48 +159,91 @@ impl<'cs, F: Field, CS: Assignment<F>> Assignment<F> for ExtractingAssignment<'c
         right_column: Column<Any>,
         right_row: usize,
     ) -> Result<(), halo2_proofs::plonk::Error> {
-        self.cs.copy(left_column, left_row, right_column, right_row)
+        println!(
+            "{} {} = {} {}",
+            Self::format_cell(left_column),
+            left_row,
+            Self::format_cell(right_column),
+            right_row
+        );
+        Ok(())
     }
 
     fn fill_from_row(
         &mut self,
-        column: Column<Fixed>,
-        row: usize,
-        to: Value<Assigned<F>>,
+        _column: Column<Fixed>,
+        _row: usize,
+        _to: Value<Assigned<F>>,
     ) -> Result<(), halo2_proofs::plonk::Error> {
-        self.cs.fill_from_row(column, row, to)
+        // todo: Not sure what should be done here
+        Ok(())
     }
 
-    fn push_namespace<NR, N>(&mut self, name_fn: N)
+    fn push_namespace<NR, N>(&mut self, _name_fn: N)
     where
         NR: Into<String>,
         N: FnOnce() -> NR,
     {
-        self.cs.push_namespace(name_fn)
     }
 
-    fn pop_namespace(&mut self, gadget_name: Option<String>) {
-        self.cs.pop_namespace(gadget_name);
-    }
+    fn pop_namespace(&mut self, _gadget_name: Option<String>) {}
+}
+
+pub fn print_gates(gates: CircuitGates) {
+    println!("------GATES-------");
+    gates
+        .to_string()
+        .lines()
+        .filter(|x| !x.contains(':'))
+        .map(|gate| {
+            println!(
+                "{}",
+                gate.replace("S", "Selector ")
+                    .replace("A", "Advice ")
+                    .replace("I", "Instance ")
+                    .replace("F", "Fixed ")
+                    .replace("@", " ")
+            );
+        })
+        .for_each(drop);
+}
+
+#[macro_export]
+macro_rules! extract_constraints {
+    ($a:ident, $b:expr, $c:ident) => {
+        let mut cs = ConstraintSystem::<TermField>::default();
+        let config = $a::<TermField>::configure(&mut cs);
+
+        let mut extr_assn = ExtractingAssignment::<TermField>::new($b);
+        <$a<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
+            &mut extr_assn,
+            &$c,
+            config,
+            vec![],
+        )
+        .unwrap();
+
+        use efp::print_gates;
+        print_gates(CircuitGates::collect::<Fp, $a<Fp>>());
+    };
 }
 
 #[cfg(test)]
 mod tests {
     use std::marker::PhantomData;
 
-    use arrayvec::ArrayString;
-    use ff::Field;
     use halo2_proofs::{
-        circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
-        dev::MockProver,
+        arithmetic::Field,
+        circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
+        dev::CircuitGates,
         pasta::Fp,
-        plonk::{Advice, Circuit, Column, ConstraintSystem, Instance, Selector},
+        plonk::{Advice, Circuit, Column, ConstraintSystem, FloorPlanner, Instance, Selector},
         poly::Rotation,
     };
 
     use crate::field::TermField;
 
-    use super::ExtractingFloorPlanner;
+    use super::{ExtractingAssignment, Target};
 
     #[derive(Debug, Clone)]
     struct FibonacciConfig {
@@ -585,7 +384,7 @@ mod tests {
 
     impl<F: Field> Circuit<F> for MyCircuit<F> {
         type Config = FibonacciConfig;
-        type FloorPlanner = ExtractingFloorPlanner<SimpleFloorPlanner>;
+        type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
             Self::default()
@@ -620,34 +419,8 @@ mod tests {
 
     #[test]
     fn fibonacci_example1() {
-        let k = 4;
+        let circuit: MyCircuit<TermField> = MyCircuit(PhantomData);
 
-        let a = {
-            let mut x = ArrayString::new();
-            x.push_str("a");
-            TermField::Expr(x)
-        }; // F[0]
-        let b = {
-            let mut x = ArrayString::new();
-            x.push_str("b");
-            TermField::Expr(x)
-        }; // F[0] // F[1]
-        let out = {
-            let mut x = ArrayString::new();
-            x.push_str("c");
-            TermField::Expr(x)
-        }; // F[9]
-
-        let circuit = MyCircuit(PhantomData);
-
-        let mut public_input = vec![a, b, out];
-
-        let prover = MockProver::run(k, &circuit, vec![public_input.clone()]).unwrap();
-        prover.assert_satisfied();
-
-        public_input[2] += TermField::One;
-        let _prover = MockProver::run(k, &circuit, vec![public_input]).unwrap();
-        // uncomment the following line and the assert will fail
-        // _prover.assert_satisfied();
+        extract_constraints!(MyCircuit, Target::AdviceGenerator, circuit);
     }
 }
