@@ -11,3 +11,6 @@ halo2_proofs = { git = "https://github.com/zcash/halo2.git" }
 arrayvec = { version = "0.7.2" }
 regex = "1"
 subtle = { version = "2.5.0" }
+
+[[example]]
+name = "fibonacci"
