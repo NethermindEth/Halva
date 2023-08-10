@@ -9,6 +9,7 @@ use halo2_proofs::{
     circuit::Value,
     plonk::{Advice, Any, Assigned, Assignment, Column, Fixed, Instance, Selector},
 };
+use regex::Regex;
 
 use crate::utils::{Halo2Column, Halo2Selector};
 
@@ -21,6 +22,7 @@ pub struct ExtractingAssignment<F: Field> {
     _marker: PhantomData<F>,
     current_region: Option<String>,
     target: Target,
+    copy_count: u32,
 }
 
 impl<F: Field> ExtractingAssignment<F> {
@@ -29,6 +31,7 @@ impl<F: Field> ExtractingAssignment<F> {
             _marker: PhantomData,
             current_region: None,
             target: target,
+            copy_count: 0,
         }
     }
 
@@ -36,13 +39,24 @@ impl<F: Field> ExtractingAssignment<F> {
     where
         T: ColumnType,
     {
-        let parsed_column = Halo2Column::try_from(format!("{:?}", col).as_str()).unwrap();
+        let parsed_column: Halo2Column =
+            Halo2Column::try_from(format!("{:?}", col).as_str()).unwrap();
         format!("{:?} {}", parsed_column.column_type, parsed_column.index)
+    }
+
+    fn lemma_name<T>(col: Column<T>, row: usize) -> String
+    where
+        T: ColumnType,
+    {
+        let parsed_column = Halo2Column::try_from(format!("{:?}", col).as_str()).unwrap();
+        let column_type = format!("{:?}", parsed_column.column_type).to_lowercase();
+        let column_idx = parsed_column.index;
+        format!("{column_type}_{column_idx}_{row}")
     }
 
     fn print_annotation(annotation: String) {
         if !annotation.is_empty() {
-            println!("--{}", annotation);
+            println!("--Annotation: {}", annotation);
         }
     }
 }
@@ -62,10 +76,7 @@ where
     }
 
     fn exit_region(&mut self) {
-        println!(
-            "--EXITTED REGION: {}",
-            self.current_region.as_ref().unwrap()
-        );
+        println!("--EXITED REGION: {}", self.current_region.as_ref().unwrap());
         self.current_region = None;
     }
 
@@ -81,7 +92,9 @@ where
     {
         Self::print_annotation(annotation().into());
         let halo2_selector = Halo2Selector::try_from(format!("{:?}", selector).as_str()).unwrap();
-        println!("EnableSelector {} {}", halo2_selector.0, row);
+        // println!("EnableSelector col: {} row: {}", halo2_selector.0, row);
+        let column = halo2_selector.0;
+        println!("def selector_{column}_{row}: Prop := c.Selector {column} {row} = 1");
         Ok(())
     }
 
@@ -115,10 +128,16 @@ where
             Target::AdviceGenerator => {
                 Self::print_annotation(annotation().into());
                 to().map(|v| {
+                    // println!(
+                    //     "Assign advice: {} row: {} = {}",
+                    //     Self::format_cell(column),
+                    //     row,
+                    //     v.into().evaluate()
+                    // );
+                    let lemma_name = Self::lemma_name(column, row);
+                    let column_str = Self::format_cell(column);
                     println!(
-                        "{} {} = {}",
-                        Self::format_cell(column),
-                        row,
+                        "def {lemma_name}: Prop := c.{column_str} {row} = {}",
                         v.into().evaluate()
                     );
                 });
@@ -143,7 +162,7 @@ where
         Self::print_annotation(annotation().into());
         to().map(|v| {
             println!(
-                "{} {} = {}",
+                "Assign fixed: {} row: {} = {}",
                 Self::format_cell(column),
                 row,
                 v.into().evaluate()
@@ -159,13 +178,22 @@ where
         right_column: Column<Any>,
         right_row: usize,
     ) -> Result<(), halo2_proofs::plonk::Error> {
+        // println!(
+        //     "Copy: {} row: {} = {} row: {}",
+        //     Self::format_cell(left_column),
+        //     left_row,
+        //     Self::format_cell(right_column),
+        //     right_row
+        // );
         println!(
-            "{} {} = {} {}",
+            "def copy_{}: Prop := c.{} {} = c.{} {}",
+            self.copy_count,
             Self::format_cell(left_column),
             left_row,
             Self::format_cell(right_column),
             right_row
         );
+        self.copy_count += 1;
         Ok(())
     }
 
@@ -204,6 +232,8 @@ where
 
 pub fn print_gates(gates: CircuitGates) {
     println!("------GATES-------");
+    let selector_regex = Regex::new(r"S(?<column>\d+)").unwrap();
+    let cell_ref_regex = Regex::new(r"(?<type>[AIF])(?<column>\d+)@(?<row>\d+)").unwrap();
     gates
         .to_string()
         .lines()
