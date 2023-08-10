@@ -54,6 +54,18 @@ impl<F: Field> ExtractingAssignment<F> {
         format!("{column_type}_{column_idx}_{row}")
     }
 
+    // May need other column types adding
+    fn add_lean_scoping(evaluated_expr: String) -> String {
+        let s = evaluated_expr
+            .replace(" Instance", " c.Instance")
+            .replace("(Instance", "(c.Instance");
+        if s.starts_with("Instance ") {
+            format!("c.{s}")
+        } else {
+            s
+        }
+    }
+
     fn print_annotation(annotation: String) {
         if !annotation.is_empty() {
             println!("--Annotation: {}", annotation);
@@ -138,7 +150,7 @@ where
                     let column_str = Self::format_cell(column);
                     println!(
                         "def {lemma_name}: Prop := c.{column_str} {row} = {}",
-                        v.into().evaluate()
+                        Self::add_lean_scoping(v.into().evaluate().to_string())
                     );
                 });
                 Ok(())
