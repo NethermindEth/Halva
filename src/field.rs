@@ -8,7 +8,7 @@ use arrayvec::ArrayString;
 use ff::Field;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
-const EXPRESSION_MAX_SIZE: usize = 10_000;
+const EXPRESSION_MAX_SIZE: usize = 16384;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TermField {
@@ -34,9 +34,34 @@ impl TermField {
         })
         .unwrap()
     }
+}
 
+impl From<&str> for TermField {
     fn from(s: &str) -> Self {
-        Self::Expr(ArrayString::from(s).unwrap())
+        match s.trim() {
+            "0" => Self::Zero,
+            "1" => Self::One,
+            s => {
+                let array_str = ArrayString::from(s);
+                if let Err(_) = array_str {
+                    panic!("{}", s)
+                } else {
+                    Self::Expr(array_str.unwrap())
+                }
+            }
+        }
+    }
+}
+
+impl From<String> for TermField {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
+impl From<&String> for TermField {
+    fn from(value: &String) -> Self {
+        Self::from(value.as_str())
     }
 }
 
@@ -79,7 +104,10 @@ impl Neg for TermField {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        Self::from(&format!("-({})", self.to_expr()))
+        match self {
+            Self::Zero => Self::Zero,
+            _ => Self::from(&format!("-({})", self.to_expr())),
+        }
     }
 }
 
@@ -87,7 +115,11 @@ impl Add for TermField {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Self::from(&format!("({}) + ({})", self.to_expr(), rhs.to_expr()))
+        match (self, rhs) {
+            (Self::Zero, _) => rhs,
+            (_, Self::Zero) => self,
+            _ => Self::from(&format!("({}) + ({})", self.to_expr(), rhs.to_expr())),
+        }
     }
 }
 
@@ -95,7 +127,11 @@ impl Sub for TermField {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self::from(&format!("({}) - ({})", self.to_expr(), rhs.to_expr()))
+        match (self, rhs) {
+            (Self::Zero, _) => rhs.neg(),
+            (_, Self::Zero) => self,
+            _ => Self::from(&format!("({}) - ({})", self.to_expr(), rhs.to_expr())),
+        }
     }
 }
 
@@ -103,7 +139,11 @@ impl Mul for TermField {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        Self::from(&format!("({}) * ({})", self.to_expr(), rhs.to_expr()))
+        match (self, rhs) {
+            (Self::One, _) => rhs,
+            (_, Self::One) => self,
+            _ => Self::from(&format!("({}) * ({})", self.to_expr(), rhs.to_expr())),
+        }
     }
 }
 
@@ -212,11 +252,11 @@ impl Field for TermField {
     }
 
     fn square(&self) -> Self {
-        panic!("Not supposed to call \"square\"")
+        *self * self
     }
 
     fn double(&self) -> Self {
-        panic!("Not supposed to call \"double\"")
+        Self::from("2") * self
     }
 
     fn invert(&self) -> CtOption<Self> {
