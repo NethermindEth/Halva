@@ -213,7 +213,32 @@ macro_rules! extract {
     ($a:ident, $b:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
+        use halo2_proofs::dev::CircuitGates;
+        use halo2_proofs::pasta::Fp;
+        use halo2_proofs::plonk::FloorPlanner;
         let circuit: MyCircuit<TermField> = $a::default();
+
+        let mut cs = ConstraintSystem::<TermField>::default();
+        let config = $a::<TermField>::configure(&mut cs);
+
+        let mut extr_assn = ExtractingAssignment::<TermField>::new($b);
+        <$a<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
+            &mut extr_assn,
+            &circuit,
+            config,
+            vec![],
+        )
+        .unwrap();
+
+        print_gates(CircuitGates::collect::<Fp, $a<Fp>>());
+    };
+    ($a:ident, $b:expr, $c:expr) => {
+        use halo2_extr::extraction::{print_gates, ExtractingAssignment};
+        use halo2_extr::field::TermField;
+        use halo2_proofs::dev::CircuitGates;
+        use halo2_proofs::pasta::Fp;
+        use halo2_proofs::plonk::FloorPlanner;
+        let circuit: MyCircuit<TermField> = $c;
 
         let mut cs = ConstraintSystem::<TermField>::default();
         let config = $a::<TermField>::configure(&mut cs);
