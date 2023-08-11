@@ -23,6 +23,7 @@ pub struct ExtractingAssignment<F: Field> {
     current_region: Option<String>,
     target: Target,
     copy_count: u32,
+    fixed_count: u32,
 }
 
 impl<F: Field> ExtractingAssignment<F> {
@@ -32,6 +33,7 @@ impl<F: Field> ExtractingAssignment<F> {
             current_region: None,
             target: target,
             copy_count: 0,
+            fixed_count: 0,
         }
     }
 
@@ -173,12 +175,20 @@ where
     {
         Self::print_annotation(annotation().into());
         to().map(|v| {
+            // println!(
+            //     "Assign fixed: {} row: {} = {}",
+            //     Self::format_cell(column),
+            //     row,
+            //     v.into().evaluate()
+            // );
             println!(
-                "Assign fixed: {} row: {} = {}",
+                "def fixed_{}: Prop := c.{} {} = {}",
+                self.fixed_count,
                 Self::format_cell(column),
                 row,
                 v.into().evaluate()
             );
+            self.fixed_count += 1;
         });
         Ok(())
     }
@@ -250,15 +260,30 @@ pub fn print_gates(gates: CircuitGates) {
         .to_string()
         .lines()
         .filter(|x| !x.contains(':'))
-        .for_each(|gate| {
+        .enumerate()
+        .for_each(|(idx, gate)| {
+            // println!("{gate}");
+            let s = cell_ref_regex
+                .replace_all(
+                    selector_regex
+                        .replace_all(gate, "c.Selector $column row")
+                        .as_ref(),
+                    "$type $column (row + $row)",
+                )
+                .as_ref()
+                .replace("A", "c.Advice")
+                .replace("I", "c.Instance")
+                .replace("F", "c.Fixed")
+                .replace(" + 0", "");
             println!(
-                "{}",
-                gate.replace("S", "Selector ")
-                    .replace("A", "Advice ")
-                    .replace("I", "Instance ")
-                    .replace("F", "Fixed ")
-                    .replace("@", " ")
-            )
+                // "def gate_{idx}: Prop := {}",
+                "def gate_{idx}: Prop := ∀ row : ℕ, {} = 0",
+                if s.starts_with('-') {
+                    s.strip_prefix('-').unwrap()
+                } else {
+                    &s
+                }
+            );
         })
 }
 
