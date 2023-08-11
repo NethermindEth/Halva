@@ -195,7 +195,7 @@ pub fn print_gates(gates: CircuitGates) {
         .to_string()
         .lines()
         .filter(|x| !x.contains(':'))
-        .map(|gate| {
+        .for_each(|gate| {
             println!(
                 "{}",
                 gate.replace("S", "Selector ")
@@ -203,23 +203,25 @@ pub fn print_gates(gates: CircuitGates) {
                     .replace("I", "Instance ")
                     .replace("F", "Fixed ")
                     .replace("@", " ")
-            );
+            )
         })
-        .for_each(drop);
 }
 
 #[macro_export]
 macro_rules! extract {
-    ($a:ident, $b:expr) => {
+    ($circuit_type:ident, $target:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
-        let circuit: MyCircuit<TermField> = $a::default();
+        use halo2_proofs::dev::CircuitGates;
+        use halo2_proofs::pasta::Fp;
+        use halo2_proofs::plonk::FloorPlanner;
+        let circuit: MyCircuit<TermField> = $circuit_type::default();
 
         let mut cs = ConstraintSystem::<TermField>::default();
-        let config = $a::<TermField>::configure(&mut cs);
+        let config = $circuit_type::<TermField>::configure(&mut cs);
 
-        let mut extr_assn = ExtractingAssignment::<TermField>::new($b);
-        <$a<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
+        let mut extr_assn = ExtractingAssignment::<TermField>::new($target);
+        <$circuit_type<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
             &mut extr_assn,
             &circuit,
             config,
@@ -227,7 +229,29 @@ macro_rules! extract {
         )
         .unwrap();
 
-        print_gates(CircuitGates::collect::<Fp, $a<Fp>>());
+        print_gates(CircuitGates::collect::<Fp, $circuit_type<Fp>>());
+    };
+    ($circuit_type:ident, $target:expr, $circuit_initializer:expr) => {
+        use halo2_extr::extraction::{print_gates, ExtractingAssignment};
+        use halo2_extr::field::TermField;
+        use halo2_proofs::dev::CircuitGates;
+        use halo2_proofs::pasta::Fp;
+        use halo2_proofs::plonk::FloorPlanner;
+        let circuit: MyCircuit<TermField> = $circuit_initializer;
+
+        let mut cs = ConstraintSystem::<TermField>::default();
+        let config = $circuit_type::<TermField>::configure(&mut cs);
+
+        let mut extr_assn = ExtractingAssignment::<TermField>::new($target);
+        <$circuit_type<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
+            &mut extr_assn,
+            &circuit,
+            config,
+            vec![],
+        )
+        .unwrap();
+
+        print_gates(CircuitGates::collect::<Fp, $circuit_type<Fp>>());
     };
 }
 
