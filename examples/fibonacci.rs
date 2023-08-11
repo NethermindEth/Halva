@@ -152,6 +152,7 @@ struct MyCircuit<F>(PhantomData<F>);
 impl<F: Field> Circuit<F> for MyCircuit<F> {
     type Config = FibonacciConfig;
     type FloorPlanner = SimpleFloorPlanner;
+    type Params = ();
 
     fn without_witnesses(&self) -> Self {
         Self::default()

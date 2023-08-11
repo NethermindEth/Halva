@@ -7,13 +7,20 @@ version = "0.1.0"
 [dependencies]
 rand_core = { version = "0.6", default-features = false }
 ff = "0.13"
-halo2_proofs = { git = "https://github.com/zcash/halo2.git" }
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["circuit-params"], tag = "v2023_04_20" }
 arrayvec = { version = "0.7.2" }
 regex = "1"
 subtle = { version = "2.5.0" }
+proc-macro2 = "1.0.60"
+
+[dev-dependencies]
+zkevm-circuits = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git" }
 
 [[example]]
 name = "fibonacci"
 
 [[example]]
 name = "two-chip"
+
+[[example]]
+name = "bytecode"

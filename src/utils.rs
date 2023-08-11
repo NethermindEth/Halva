@@ -1,6 +1,5 @@
 use std::convert::TryFrom;
 
-use halo2_proofs::plonk::Any;
 use regex::Regex;
 use std::str::FromStr;
 
@@ -8,13 +7,23 @@ use std::str::FromStr;
 pub struct ExtractorError;
 
 #[derive(Clone, Copy, Debug)]
+pub enum Halo2Any {
+    /// An Advice variant
+    Advice,
+    /// A Fixed variant
+    Fixed,
+    /// An Instance variant
+    Instance,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct Halo2Column {
     pub(crate) index: usize,
-    pub(crate) column_type: Any,
+    pub(crate) column_type: Halo2Any,
 }
 
 impl Halo2Column {
-    pub fn new(index: usize, column_type: Any) -> Self {
+    pub fn new(index: usize, column_type: Halo2Any) -> Self {
         Halo2Column { index, column_type }
     }
 }
@@ -32,9 +41,9 @@ impl TryFrom<&str> for Halo2Column {
                 return Ok(Halo2Column::new(
                     usize::from_str(&cap[1]).map_err(|_| ExtractorError)?,
                     match &cap[2] {
-                        "Advice" => Any::Advice,
-                        "Instance" => Any::Instance,
-                        "Fixed" => Any::Fixed,
+                        "Instance" => Halo2Any::Instance,
+                        "Fixed" => Halo2Any::Fixed,
+                        "Advice" => Halo2Any::Advice,
                         _ => panic!("Unknown column type \"{}\"", &cap[2]),
                     },
                 ));
