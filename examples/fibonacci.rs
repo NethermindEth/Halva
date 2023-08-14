@@ -6,9 +6,7 @@ use std::marker::PhantomData;
 use halo2_proofs::{
     arithmetic::Field,
     circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
-    dev::CircuitGates,
-    pasta::Fp,
-    plonk::{Advice, Circuit, Column, ConstraintSystem, FloorPlanner, Instance, Selector},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Instance, Selector},
     poly::Rotation,
 };
 
@@ -154,6 +152,7 @@ struct MyCircuit<F>(PhantomData<F>);
 impl<F: Field> Circuit<F> for MyCircuit<F> {
     type Config = FibonacciConfig;
     type FloorPlanner = SimpleFloorPlanner;
+    type Params = ();
 
     fn without_witnesses(&self) -> Self {
         Self::default()
