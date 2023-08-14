@@ -32,9 +32,10 @@ impl TryFrom<&str> for Halo2Column {
     type Error = ExtractorError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let re =
-            Regex::new(r"Column\s\{\sindex:\s(\d+),\scolumn_type:\s(Advice|Instance|Fixed)\s\}")
-                .map_err(|_| ExtractorError)?;
+        let re = Regex::new(
+            r"Column\s\{\sindex:\s(\d+),\scolumn_type:\s(Advice|Advice \{.*\}|Instance|Fixed)\s\}",
+        )
+        .map_err(|_| ExtractorError)?;
 
         for cap in re.captures_iter(value) {
             if cap.len() > 2 {
@@ -43,8 +44,13 @@ impl TryFrom<&str> for Halo2Column {
                     match &cap[2] {
                         "Instance" => Halo2Any::Instance,
                         "Fixed" => Halo2Any::Fixed,
-                        "Advice" => Halo2Any::Advice,
-                        _ => panic!("Unknown column type \"{}\"", &cap[2]),
+                        column_type => {
+                            if column_type.starts_with("Advice") {
+                                Halo2Any::Advice
+                            } else {
+                                panic!("Unknown column type \"{}\"", &cap[2])
+                            }
+                        }
                     },
                 ));
             } else {

@@ -208,7 +208,7 @@ pub fn print_gates(gates: CircuitGates) {
         .to_string()
         .lines()
         .filter(|x| !x.contains(':'))
-        .map(|gate| {
+        .for_each(|gate| {
             println!(
                 "{}",
                 gate.replace("S", "Selector ")
@@ -216,9 +216,8 @@ pub fn print_gates(gates: CircuitGates) {
                     .replace("I", "Instance ")
                     .replace("F", "Fixed ")
                     .replace("@", " ")
-            );
+            )
         })
-        .for_each(drop);
 }
 
 #[macro_export]
@@ -228,8 +227,8 @@ macro_rules! extract {
         use halo2_extr::field::TermField;
         use halo2_proofs::dev::CircuitGates;
         use halo2_proofs::halo2curves::pasta::Fp;
-        use halo2_proofs::plonk::FloorPlanner;
-        let circuit: MyCircuit<TermField> = $a::default();
+        use halo2_proofs::plonk::{Circuit, ConstraintSystem, FloorPlanner};
+        let circuit: $a<TermField> = $a::default();
 
         let mut cs = ConstraintSystem::<TermField>::default();
         let config = $a::<TermField>::configure(&mut cs);
@@ -252,9 +251,9 @@ macro_rules! extract {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
         use halo2_proofs::dev::CircuitGates;
-        use halo2_proofs::halo2curves::pasta::Fp;
-        use halo2_proofs::plonk::FloorPlanner;
-        let circuit: MyCircuit<TermField> = $c;
+        use halo2_proofs::halo2curves::bn256::Fq;
+        use halo2_proofs::plonk::{Circuit, ConstraintSystem, FloorPlanner};
+        let circuit: $a<TermField> = $c;
 
         let mut cs = ConstraintSystem::<TermField>::default();
         let config = $a::<TermField>::configure(&mut cs);
@@ -268,8 +267,8 @@ macro_rules! extract {
         )
         .unwrap();
 
-        print_gates(CircuitGates::collect::<Fp, $a<Fp>>(<$a<Fp> as Circuit<
-            Fp,
+        print_gates(CircuitGates::collect::<Fq, $a<Fq>>(<$a<Fq> as Circuit<
+            Fq,
         >>::Params::default(
         )));
     };

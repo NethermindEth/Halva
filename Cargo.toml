@@ -11,10 +11,10 @@ halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.gi
 arrayvec = { version = "0.7.2" }
 regex = "1"
 subtle = { version = "2.5.0" }
+num-bigint = { version = "0.4.3" }
 proc-macro2 = "1.0.60"
-
-[dev-dependencies]
-zkevm-circuits = { git = "https://github.com/privacy-scaling-explorations/zkevm-circuits.git" }
+zkevm-circuits = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git", features = ["test-circuits"] }
+eth-types = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git" }
 
 [[example]]
 name = "fibonacci"
