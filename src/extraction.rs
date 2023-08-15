@@ -254,8 +254,8 @@ where
 
 pub fn print_gates(gates: CircuitGates) {
     println!("------GATES-------");
-    let selector_regex = Regex::new(r"S(?<column>\d+)").unwrap();
-    let cell_ref_regex = Regex::new(r"(?<type>[AIF])(?<column>\d+)@(?<row>\d+)").unwrap();
+    let selector_regex = Regex::new(r"S(?P<column>\d+)").unwrap();
+    let cell_ref_regex = Regex::new(r"(?P<type>[AIF])(?P<column>\d+)@(?P<row>\d+)").unwrap();
     gates
         .to_string()
         .lines()
@@ -271,9 +271,10 @@ pub fn print_gates(gates: CircuitGates) {
                     "$type $column (row + $row)",
                 )
                 .as_ref()
-                .replace("A", "c.Advice")
-                .replace("I", "c.Instance")
-                .replace("F", "c.Fixed")
+                .replace("A", "c.Advice ")
+                .replace("I", "c.Instance ")
+                .replace("F", "c.Fixed ")
+                .replace("@", " ")
                 .replace(" + 0", "");
             println!(
                 // "def gate_{idx}: Prop := {}",
