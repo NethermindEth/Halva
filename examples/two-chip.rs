@@ -1,7 +1,3 @@
-extern crate ff;
-extern crate halo2_extr;
-extern crate halo2_proofs;
-
 use std::marker::PhantomData;
 
 use ff::Field;
