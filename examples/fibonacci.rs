@@ -7,7 +7,7 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
-use halo2_extr::{extract, extraction::Target};
+use halo2_extr::{extract, extraction::{Target, print_preamble, print_postamble}};
 
 #[derive(Debug, Clone)]
 struct FibonacciConfig {
@@ -182,5 +182,7 @@ impl<F: Field> Circuit<F> for MyCircuit<F> {
 }
 
 fn main() {
+    print_preamble("Fibonacci9");
     extract!(MyCircuit, Target::AdviceGenerator);
+    print_postamble("Fibonacci9");
 }

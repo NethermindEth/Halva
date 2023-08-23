@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use ff::Field;
-use halo2_extr::{extract, extraction::Target};
+use halo2_extr::{extract, extraction::{Target, print_preamble, print_postamble}};
 use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter, Region, SimpleFloorPlanner, Value},
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance, Selector},
@@ -498,9 +498,11 @@ impl<F: Field> Circuit<F> for MyCircuit<F> {
 
 #[allow(clippy::many_single_char_names)]
 fn main() {
-    let a = TermField::from("a");
-    let b = TermField::from("b");
-    let c = TermField::from("c");
+    print_preamble("TwoChip");
+
+    let a = TermField::create_symbol("a");
+    let b = TermField::create_symbol("b");
+    let c = TermField::create_symbol("c");
 
     // Instantiate the circuit with the private inputs.
     let circuit = MyCircuit {
@@ -510,4 +512,6 @@ fn main() {
     };
 
     extract!(MyCircuit, Target::AdviceGenerator, circuit);
+
+    print_postamble("TwoChip");
 }

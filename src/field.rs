@@ -28,6 +28,13 @@ impl TermField {
         TermField::One
     }
 
+    // Note this must be called at the start of the extraction, since it adds to the Circuit structure
+    // TODO: Switch to a paradigm in which data is collected rather than printed during extraction, then printed at the end
+    pub fn create_symbol(name: &str) -> Self {
+        println!("  {name}: ZMod P");
+        TermField::from(format!("c.{name}"))
+    }
+
     fn to_expr(&self) -> ArrayString<EXPRESSION_MAX_SIZE> {
         ArrayString::from(&match self {
             TermField::Zero => "0",
