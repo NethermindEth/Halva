@@ -322,18 +322,19 @@ where
 
     fn pop_namespace(&mut self, _gadget_name: Option<String>) {}
 
-    fn annotate_column<A, AR>(&mut self, _annotation: A, _column: Column<Any>)
-    where
-        A: FnOnce() -> AR,
-        AR: Into<String>,
-    {
-        println!("--Annotate column");
-    }
+    // privacy-scaling-solutions
+    // fn annotate_column<A, AR>(&mut self, _annotation: A, _column: Column<Any>)
+    // where
+    //     A: FnOnce() -> AR,
+    //     AR: Into<String>,
+    // {
+    //     println!("--Annotate column");
+    // }
 
-    fn get_challenge(&self, _challenge: halo2_proofs::plonk::Challenge) -> Value<F> {
-        println!("--Get challenge");
-        Value::unknown()
-    }
+    // fn get_challenge(&self, _challenge: halo2_proofs::plonk::Challenge) -> Value<F> {
+    //     println!("--Get challenge");
+    //     Value::unknown()
+    // }
 }
 
 pub fn print_gates(gates: CircuitGates) {
@@ -407,29 +408,38 @@ macro_rules! extract {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
         use halo2_proofs::dev::CircuitGates;
-        use halo2_proofs::halo2curves::pasta::Fp;
+        // privacy-scaling-solutions
+        // use halo2_proofs::halo2curves::pasta::Fp;
+        // zcash
+        use group::ff::Field;
         use halo2_proofs::plonk::{Circuit, ConstraintSystem, FloorPlanner};
         let circuit: $a<TermField> = $a::default();
 
         let mut cs = ConstraintSystem::<TermField>::default();
-        let config = $a::<TermField>::configure(&mut cs);
+        let config = $a::<TermField>::configure(&mut cs, [
+            Column::new(0, Advice),
+            Column::new(1, Advice),
+            Column::new(2, Advice),
+            Column::new(3, Advice),
+            Column::new(4, Advice),
+        ]);
 
-        println!("variable {{P: ℕ}} {{P_Prime: Nat.Prime P}} (c: Circuit P P_Prime)");
+        // println!("variable {{P: ℕ}} {{P_Prime: Nat.Prime P}} (c: Circuit P P_Prime)");
 
-        let mut extr_assn = ExtractingAssignment::<TermField>::new($b);
-        <$a<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
-            &mut extr_assn,
-            &circuit,
-            config,
-            vec![],
-        )
-        .unwrap();
+        // let mut extr_assn = ExtractingAssignment::<TermField>::new($b);
+        // <$a<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
+        //     &mut extr_assn,
+        //     &circuit,
+        //     config,
+        //     vec![],
+        // )
+        // .unwrap();
 
-        extr_assn.print_grouping_props();
-        print_gates(CircuitGates::collect::<Fp, $a<Fp>>(<$a<Fp> as Circuit<
-            Fp,
-        >>::Params::default(
-        )));
+        // extr_assn.print_grouping_props();
+        // privacy-scaling-solutions
+        // print_gates(CircuitGates::collect::<Fp, $a<Fp>>());
+        // zcash
+        // print_gates(CircuitGates::collect::<TermField, $a<TermField>>());
     };
     ($a:ident, $b:expr, $c:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
