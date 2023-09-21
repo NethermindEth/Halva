@@ -1,22 +1,38 @@
 use std::{
-    fmt::Display,
+    fmt::Debug, fmt::Display,
     iter::{Product, Sum},
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 use arrayvec::ArrayString;
 use eth_types::Field;
-use ff::{Field as Halo2Field, FromUniformBytes, PrimeField};
+use ff::{Field as Halo2Field, FromUniformBytes, PrimeField, PrimeFieldBits};
+use halo2_proofs::pasta::Fp;
 use num_bigint::BigUint;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 const EXPRESSION_MAX_SIZE: usize = 16384;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TermField {
     Zero,
     One,
     Expr(ArrayString<EXPRESSION_MAX_SIZE>),
+}
+
+// TODO fix hack
+//   implementation of decompose-running-sum expects a number starting with 0x
+//   the default implementation of Debug for TermField therefore causes a crash when it cannot remove the 0x prefix
+//   to get around this, a meaningless 0x prefix is added. The output is NOT in hexadecimal
+impl Debug for TermField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", format!("0x{}", self.to_expr()))
+        // match self {
+        //     Self::Zero => write!(f, "0xZero"),
+        //     Self::One => write!(f, "0xOne"),
+        //     Self::Expr(arg0) => f.debug_tuple("Expr").field(arg0).finish(),
+        // }
+    }
 }
 
 impl TermField {
@@ -333,3 +349,18 @@ impl FromUniformBytes<64> for TermField {
 }
 
 impl Field for TermField {}
+
+impl PrimeFieldBits for TermField {
+    type ReprBits = [u64; 4];
+
+    fn to_le_bits(&self) -> ff::FieldBits<Self::ReprBits> {
+        // println!("Running to_le_bits for {}", self.to_expr());
+        let f: Fp = self.to_expr().as_str().parse::<u64>().unwrap().into();
+        // println!("    Got {}", f.to_le_bits());
+        f.to_le_bits()
+    }
+
+    fn char_le_bits() -> ff::FieldBits<Self::ReprBits> {
+        todo!()
+    }
+}

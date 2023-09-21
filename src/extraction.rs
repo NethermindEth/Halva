@@ -159,6 +159,7 @@ impl<F: Field> ExtractingAssignment<F> {
     }
 
     fn set_fixed(&mut self, col: usize, row: usize, val: String) {
+        // println!("Setting fixed {}", val);
         let s = self.fixed.get_mut(&col);
         if let Some(m) = s {
             m.insert(row, val);
@@ -340,8 +341,9 @@ where
 pub fn print_gates(gates: CircuitGates) {
     println!("------GATES-------");
     let selector_regex = Regex::new(r"S(?P<column>\d+)").unwrap();
-    let cell_ref_regex = Regex::new(r"(?P<type>[AIF])(?P<column>\d+)@(?P<row>\d+)").unwrap();
+    let cell_ref_regex = Regex::new(r"(?P<type>[AIF])(?P<column>\d+)@(?P<row>-?\d+)").unwrap();
     let gate_string = gates.to_string();
+    println!("{}", gate_string);
     let gate_strings = gate_string
         .lines()
         .filter(|x| !x.contains(':'))
@@ -357,9 +359,9 @@ pub fn print_gates(gates: CircuitGates) {
                     "$type $column (row + $row)",
                 )
                 .as_ref()
-                .replace("A", "c.Advice ")
-                .replace("I", "c.Instance ")
-                .replace("F", "c.Fixed ")
+                .replace("A ", "c.Advice ")
+                .replace("I ", "c.Instance ")
+                .replace("F ", "c.Fixed ")
                 .replace("@", " ")
                 .replace(" + 0", "");
             println!(
