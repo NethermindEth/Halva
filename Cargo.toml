@@ -16,7 +16,7 @@ regex = "1"
 subtle = { version = "2.5.0" }
 num-bigint = { version = "0.4.3" }
 proc-macro2 = "1.0.60"
-zkevm-circuits = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git", features = ["test-circuits"] }
+# zkevm-circuits = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git", features = ["test-circuits"] }
 eth-types = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git" }
 itertools = "0.11.0"
 group = "0.13.0"

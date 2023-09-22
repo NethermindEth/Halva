@@ -14,7 +14,7 @@ use halo2_proofs::{
 };
 use regex::Regex;
 
-use crate::utils::{Halo2Column, Halo2Selector};
+use crate::utils::{Halo2Column, Halo2Selector, extract_selector_row};
 
 pub enum Target {
     Constraints,
@@ -50,8 +50,7 @@ impl<F: Field> ExtractingAssignment<F> {
     where
         T: ColumnType,
     {
-        let parsed_column: Halo2Column =
-            Halo2Column::try_from(format!("{:?}", col).as_str()).unwrap();
+        let parsed_column: Halo2Column = Halo2Column::try_from(&col).unwrap();
         format!("{:?} {}", parsed_column.column_type, parsed_column.index)
     }
 
@@ -94,46 +93,73 @@ impl<F: Field> ExtractingAssignment<F> {
 
         println!("def all_copy_constraints: Prop := {copy_constraints_body}");
 
-        let fixed_body = if self.fixed_count == 0 {
-            "true".to_string()
-        } else {
-            (0..self.fixed_count)
-                .map(|val| format!("fixed_{val} c"))
-                .join(" ∧ ")
-        };
 
-        println!("def all_fixed: Prop := {fixed_body}");
+        for (col, row_set) in &self.selectors {
+            println!("def selector_func_col_{col} : ℕ → ZMod P :=");
+            println!("  λ row => match row with");
+            if let Some(max_row) = row_set.last() {
+                let mut curr_val = 0;
+                for row in (0..=*max_row).rev() {
+                    let new_val = if row_set.contains(&row) { 1 } else { 0 };
+                    if curr_val != new_val {
+                        println!("    | _+{} => {curr_val}", row+1);
+                        curr_val = new_val;
+                    }
+                }
+                println!("    | _ => {curr_val}");
+            } else {
+                println!("    | _ => 0");
+            }
+        }
 
         println!("def selector_func : ℕ → ℕ → ZMod P :=");
-        println!("  λ col row => match col, row with");
-        for (col, row_set) in &self.selectors {
-            for row in row_set {
-                println!("    | {col}, {row} => 1");
-            }
+        println!("  λ col row => match col with");
+        for col in self.selectors.keys() {
+            println!("    | {col} => selector_func_col_{col} row")
         }
-        println!("    | _, _ => 0");
+        println!("    | _ => 0");
 
-        println!("def advice_func : ℕ → ℕ → ZMod P :=");
-        println!("  λ col row => match col, row with");
-        for (col, row_set) in &self.advice {
+        // println!("def advice_func : ℕ → ℕ → ZMod P :=");
+        // println!("  λ col row => match col, row with");
+        // for (col, row_set) in &self.advice {
+        //     if let Some(max_row) = row_set.keys().max() {
+        //         let mut curr_val = "0";
+        //         let zero = "0".to_string();
+        //         for row in (0..=*max_row).rev() {
+        //             let new_val = row_set.get(&row).unwrap_or(&zero);
+        //             if curr_val != new_val {
+        //                 println!("    | {col} n+{} => {curr_val}", row+1);
+        //                 curr_val = new_val;
+        //             }
+        //         }
+        //         println!("    | {col} _ => {curr_val}");
+        //     } else {
+        //         println!("    | {col} _ => 0");
+        //     }
+        // }
+        // println!("    | _, _ => 0");
+
+        for (col, row_set) in &self.fixed {
+            println!("def fixed_func_col_{col} : ℕ → ZMod P :=");
+            println!("  λ row => match row with");
             for (row, value) in row_set {
                 if value != "0" {
-                    println!("    | {col}, {row} => {value}");
+                    println!("    | {row} => {value}");
                 }
             }
+            println!("    | _ => 0");
         }
-        println!("    | _, _ => 0");
 
         println!("def fixed_func : ℕ → ℕ → ZMod P :=");
-        println!("  λ col row => match col, row with");
-        for (col, row_set) in &self.fixed {
-            for (row, value) in row_set {
-                if value != "0" {
-                    println!("    | {col}, {row} => {value}");
-                }
-            }
+        if self.fixed.keys().len() == 0 {
+            println!("  λ col _ => match col with");
+        } else {
+            println!("  λ col row => match col with");
         }
-        println!("    | _, _ => 0");
+        for col in self.fixed.keys() {
+            println!("    | {col} => fixed_func_col_{col} row");
+        }
+        println!("    | _ => 0");
     }
 
     fn set_selector(&mut self, col: usize, row: usize) {
@@ -200,8 +226,7 @@ where
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        let halo2_selector = Halo2Selector::try_from(format!("{:?}", selector).as_str()).unwrap();
-        self.set_selector(halo2_selector.0, row);
+        self.set_selector(extract_selector_row(selector).unwrap(), row);
         Ok(())
     }
 
@@ -235,7 +260,7 @@ where
             Target::AdviceGenerator => {
                 // Self::print_annotation(annotation().into());
                 to().map(|v| {
-                    let halo2_column = Halo2Column::try_from(format!("{:?}", column).as_str()).unwrap();
+                    let halo2_column = Halo2Column::try_from(&column).unwrap();
                     self.set_advice(halo2_column.index, row, Self::add_lean_scoping(v.into().evaluate().to_string()));
                 });
                 Ok(())
@@ -272,7 +297,7 @@ where
             //     v.into().evaluate()
             // );
             // self.fixed_count += 1;
-            let halo2_column = Halo2Column::try_from(format!("{:?}", column).as_str()).unwrap();
+            let halo2_column = Halo2Column::try_from(&column).unwrap();
             self.set_fixed(halo2_column.index, row, Self::add_lean_scoping(v.into().evaluate().to_string()));
         });
         Ok(())
@@ -343,7 +368,7 @@ pub fn print_gates(gates: CircuitGates) {
     let selector_regex = Regex::new(r"S(?P<column>\d+)").unwrap();
     let cell_ref_regex = Regex::new(r"(?P<type>[AIF])(?P<column>\d+)@(?P<row>-?\d+)").unwrap();
     let gate_string = gates.to_string();
-    println!("{}", gate_string);
+    // println!("{}", gate_string);
     let gate_strings = gate_string
         .lines()
         .filter(|x| !x.contains(':'))

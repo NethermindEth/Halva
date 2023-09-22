@@ -1,7 +1,7 @@
 use group::ff::{Field, PrimeField};
 use halo2_extr::{
     extraction::{print_gates, print_postamble, print_preamble, ExtractingAssignment, Target},
-    field::TermField,
+    field::TermField, utils::extract_selector_row,
 };
 use halo2_gadgets::utilities::{bool_check, ternary, UtilitiesInstructions};
 use halo2_proofs::{
@@ -14,6 +14,7 @@ use halo2_proofs::{
     poly::Rotation,
 };
 use std::marker::PhantomData;
+use halo2_extr::utils::{Halo2Column, Halo2Selector};
 
 /// Instructions for a conditional swap gadget.
 pub trait CondSwapInstructions<F: Field>: UtilitiesInstructions<F> {

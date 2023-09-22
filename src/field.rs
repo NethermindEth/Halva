@@ -68,10 +68,10 @@ impl From<&str> for TermField {
             "1" => Self::One,
             s => {
                 let array_str = ArrayString::from(s);
-                if let Err(_) = array_str {
-                    panic!("{}", s)
+                if let Ok(str) = array_str {
+                    Self::Expr(str)
                 } else {
-                    Self::Expr(array_str.unwrap())
+                    panic!("{}", s)
                 }
             }
         }
@@ -286,7 +286,7 @@ impl Halo2Field for TermField {
 
     fn invert(&self) -> CtOption<Self> {
         CtOption::new(
-            Self::from(format!("{}^(-1)", self.to_string())),
+            Self::from(format!("(({}: ZMod P).inv)", self)),
             Choice::from(1),
         )
     }
