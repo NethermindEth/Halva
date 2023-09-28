@@ -14,7 +14,7 @@ use halo2_proofs::{
 };
 use regex::Regex;
 
-use crate::utils::{Halo2Column, Halo2Selector, extract_selector_row};
+use crate::utils::{Halo2Column, extract_selector_row};
 
 pub enum Target {
     Constraints,
@@ -26,7 +26,6 @@ pub struct ExtractingAssignment<F: Field> {
     // current_region: Option<String>,
     target: Target,
     copy_count: u32,
-    fixed_count: u32,
     selectors: BTreeMap<usize, BTreeSet<usize>>,
     advice: BTreeMap<usize, BTreeMap<usize, String>>,
     fixed: BTreeMap<usize, BTreeMap<usize, String>>,
@@ -36,10 +35,8 @@ impl<F: Field> ExtractingAssignment<F> {
     pub fn new(target: Target) -> Self {
         Self {
             _marker: PhantomData,
-            // current_region: None,
-            target: target,
+            target,
             copy_count: 0,
-            fixed_count: 0,
             selectors: BTreeMap::new(),
             advice: BTreeMap::new(),
             fixed: BTreeMap::new(),
@@ -387,7 +384,7 @@ pub fn print_gates(gates: CircuitGates) {
                 .replace("A ", "c.Advice ")
                 .replace("I ", "c.Instance ")
                 .replace("F ", "c.Fixed ")
-                .replace("@", " ")
+                .replace('@', " ")
                 .replace(" + 0", "");
             println!(
                 // "def gate_{idx}: Prop := {}",
@@ -399,7 +396,7 @@ pub fn print_gates(gates: CircuitGates) {
                 }
             );
         });
-    let all_gates_body = if gate_strings.len() == 0 {
+    let all_gates_body = if gate_strings.is_empty() {
         "true".to_string()
     } else {
         (0..gate_strings.len())

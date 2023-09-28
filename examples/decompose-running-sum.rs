@@ -1,14 +1,13 @@
-use std::ops::{Mul, Sub, Add, MulAssign, SubAssign, AddAssign, Neg};
 
-use ff::{PrimeFieldBits, Field};
+
+use ff::{PrimeFieldBits};
 use halo2_extr::{extraction::{print_preamble, Target, ExtractingAssignment, print_gates, print_postamble}, field::TermField};
 use halo2_gadgets::utilities::decompose_running_sum::RunningSumConfig;
 use halo2_proofs::{
     circuit::{Value, SimpleFloorPlanner, Layouter},
-    plonk::{ConstraintSystem, Error, FloorPlanner, Circuit, Column, Fixed},
-    pasta::Fp, dev::CircuitGates,
+    plonk::{ConstraintSystem, Error, FloorPlanner, Circuit}, dev::CircuitGates,
 };
-use subtle::{ConstantTimeEq, ConditionallySelectable};
+
 
 struct MyCircuit<
 	F: PrimeFieldBits,

@@ -13,6 +13,9 @@ use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 const EXPRESSION_MAX_SIZE: usize = 16384;
 
+// Field requires Copy, however String is not copyable
+// It would be possible to use a more restricted enum representation of all possible expressions
+// instead in the future if there are efficiency issues
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TermField {
     Zero,
@@ -26,12 +29,7 @@ pub enum TermField {
 //   to get around this, a meaningless 0x prefix is added. The output is NOT in hexadecimal
 impl Debug for TermField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", format!("0x{}", self.to_expr()))
-        // match self {
-        //     Self::Zero => write!(f, "0xZero"),
-        //     Self::One => write!(f, "0xOne"),
-        //     Self::Expr(arg0) => f.debug_tuple("Expr").field(arg0).finish(),
-        // }
+        write!(f, "0x{}", self.to_expr())
     }
 }
 
@@ -52,7 +50,7 @@ impl TermField {
     }
 
     fn to_expr(&self) -> ArrayString<EXPRESSION_MAX_SIZE> {
-        ArrayString::from(&match self {
+        ArrayString::from(match self {
             TermField::Zero => "0",
             TermField::One => "1",
             TermField::Expr(x) => x,

@@ -1,9 +1,9 @@
-use std::{convert::TryFrom, error::Error};
+use std::convert::TryFrom;
 
-use halo2_proofs::{plonk::{Selector, Column, ColumnType}};
+use halo2_proofs::plonk::{Selector, Column, ColumnType};
 use regex::Regex;
 use std::str::FromStr;
-use itertools::Itertools;
+
 
 #[derive(Debug)]
 pub struct ExtractorError;
