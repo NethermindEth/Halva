@@ -459,7 +459,6 @@ impl<F: Field> Circuit<F> for MyCircuit<F> {
     // Since we are using a single chip for everything, we can just reuse its config.
     type Config = FieldConfig;
     type FloorPlanner = SimpleFloorPlanner;
-    type Params = [Value<F>; 3];
 
     fn without_witnesses(&self) -> Self {
         Self::default()

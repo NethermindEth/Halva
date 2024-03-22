@@ -238,18 +238,6 @@ where
 
     fn pop_namespace(&mut self, _gadget_name: Option<String>) {}
 
-    fn annotate_column<A, AR>(&mut self, _annotation: A, _column: Column<Any>)
-    where
-        A: FnOnce() -> AR,
-        AR: Into<String>,
-    {
-        println!("--Annotate column");
-    }
-
-    fn get_challenge(&self, _challenge: halo2_proofs::plonk::Challenge) -> Value<F> {
-        println!("--Get challenge");
-        Value::unknown()
-    }
 }
 
 pub fn print_gates(gates: CircuitGates) {
@@ -294,7 +282,7 @@ macro_rules! extract {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
         use halo2_proofs::dev::CircuitGates;
-        use halo2_proofs::halo2curves::pasta::Fp;
+        use halo2_proofs::pasta::Fp;
         use halo2_proofs::plonk::{Circuit, ConstraintSystem, FloorPlanner};
         let circuit: $a<TermField> = $a::default();
 
@@ -310,16 +298,13 @@ macro_rules! extract {
         )
         .unwrap();
 
-        print_gates(CircuitGates::collect::<Fp, $a<Fp>>(<$a<Fp> as Circuit<
-            Fp,
-        >>::Params::default(
-        )));
+        print_gates(CircuitGates::collect::<Fp, $a<Fp>>());
     };
     ($a:ident, $b:expr, $c:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
         use halo2_proofs::dev::CircuitGates;
-        use halo2_proofs::halo2curves::bn256::Fq;
+        use halo2_proofs::pasta::Fq;
         use halo2_proofs::plonk::{Circuit, ConstraintSystem, FloorPlanner};
         let circuit: $a<TermField> = $c;
 
@@ -335,10 +320,7 @@ macro_rules! extract {
         )
         .unwrap();
 
-        print_gates(CircuitGates::collect::<Fq, $a<Fq>>(<$a<Fq> as Circuit<
-            Fq,
-        >>::Params::default(
-        )));
+        print_gates(CircuitGates::collect::<Fq, $a<Fq>>());
     };
     ($a:ident, $b:expr, $c:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
