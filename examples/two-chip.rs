@@ -2,9 +2,10 @@ use std::marker::PhantomData;
 
 use ff::Field;
 use halo2_extr::{extract, extraction::Target};
+use halo2_frontend::plonk::Error;
 use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter, Region, SimpleFloorPlanner, Value},
-    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance, Selector},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Instance, Selector},
     poly::Rotation,
 };
 

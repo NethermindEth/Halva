@@ -2,8 +2,8 @@ use std::convert::TryFrom;
 use std::fmt::Display;
 use std::marker::PhantomData;
 
-use halo2_proofs::dev::CircuitGates;
-use halo2_proofs::plonk::ColumnType;
+use halo2_frontend::dev::CircuitGates;
+use halo2_frontend::plonk::ColumnType;
 use halo2_proofs::{
     arithmetic::Field,
     circuit::Value,
@@ -99,7 +99,7 @@ where
         annotation: A,
         selector: &Selector,
         row: usize,
-    ) -> Result<(), halo2_proofs::plonk::Error>
+    ) -> Result<(), halo2_frontend::plonk::Error>
     where
         A: FnOnce() -> AR,
         AR: Into<String>,
@@ -116,7 +116,7 @@ where
         &self,
         column: Column<Instance>,
         row: usize,
-    ) -> Result<Value<F>, halo2_proofs::plonk::Error> {
+    ) -> Result<Value<F>, halo2_frontend::plonk::Error> {
         Ok(Value::known(F::from(format!(
             "{} {}",
             Self::format_cell(column),
@@ -130,7 +130,7 @@ where
         column: Column<Advice>,
         row: usize,
         to: V,
-    ) -> Result<(), halo2_proofs::plonk::Error>
+    ) -> Result<(), halo2_frontend::plonk::Error>
     where
         V: FnOnce() -> Value<VR>,
         VR: Into<Assigned<F>>,
@@ -166,7 +166,7 @@ where
         column: Column<Fixed>,
         row: usize,
         to: V,
-    ) -> Result<(), halo2_proofs::plonk::Error>
+    ) -> Result<(), halo2_frontend::plonk::Error>
     where
         V: FnOnce() -> Value<VR>,
         VR: Into<Assigned<F>>,
@@ -199,7 +199,7 @@ where
         left_row: usize,
         right_column: Column<Any>,
         right_row: usize,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
+    ) -> Result<(), halo2_frontend::plonk::Error> {
         // println!(
         //     "Copy: {} row: {} = {} row: {}",
         //     Self::format_cell(left_column),
@@ -224,7 +224,7 @@ where
         _column: Column<Fixed>,
         _row: usize,
         _to: Value<Assigned<F>>,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
+    ) -> Result<(), halo2_frontend::plonk::Error> {
         // todo: Not sure what should be done here
         Ok(())
     }
@@ -293,7 +293,7 @@ macro_rules! extract {
     ($a:ident, $b:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
-        use halo2_proofs::dev::CircuitGates;
+        use halo2_frontend::dev::CircuitGates;
         use halo2_proofs::halo2curves::pasta::Fp;
         use halo2_proofs::plonk::{Circuit, ConstraintSystem, FloorPlanner};
         let circuit: $a<TermField> = $a::default();
@@ -318,7 +318,7 @@ macro_rules! extract {
     ($a:ident, $b:expr, $c:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
-        use halo2_proofs::dev::CircuitGates;
+        use halo2_frontend::dev::CircuitGates;
         use halo2_proofs::halo2curves::bn256::Fq;
         use halo2_proofs::plonk::{Circuit, ConstraintSystem, FloorPlanner};
         let circuit: $a<TermField> = $c;

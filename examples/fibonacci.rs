@@ -71,7 +71,7 @@ impl<F: Field> FibonacciChip<F> {
         mut layouter: impl Layouter<F>,
     ) -> Result<
         (AssignedCell<F, F>, AssignedCell<F, F>, AssignedCell<F, F>),
-        halo2_proofs::plonk::Error,
+        halo2_frontend::plonk::Error,
     > {
         layouter.assign_region(
             || "first row",
@@ -111,7 +111,7 @@ impl<F: Field> FibonacciChip<F> {
         mut layouter: impl Layouter<F>,
         prev_b: &AssignedCell<F, F>,
         prev_c: &AssignedCell<F, F>,
-    ) -> Result<AssignedCell<F, F>, halo2_proofs::plonk::Error> {
+    ) -> Result<AssignedCell<F, F>, halo2_frontend::plonk::Error> {
         layouter.assign_region(
             || "next row",
             |mut region| {
@@ -138,7 +138,7 @@ impl<F: Field> FibonacciChip<F> {
         mut layouter: impl Layouter<F>,
         cell: &AssignedCell<F, F>,
         row: usize,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
+    ) -> Result<(), halo2_frontend::plonk::Error> {
         layouter.constrain_instance(cell.cell(), self.config.instance, row)
     }
 }
@@ -163,7 +163,7 @@ impl<F: Field> Circuit<F> for MyCircuit<F> {
         &self,
         config: Self::Config,
         mut layouter: impl Layouter<F>,
-    ) -> Result<(), halo2_proofs::plonk::Error> {
+    ) -> Result<(), halo2_frontend::plonk::Error> {
         let chip = FibonacciChip::construct(config);
 
         let (_, mut prev_b, mut prev_c) =

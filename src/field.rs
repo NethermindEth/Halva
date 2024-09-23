@@ -5,7 +5,7 @@ use std::{
 };
 
 use arrayvec::ArrayString;
-use eth_types::Field;
+// use eth_types::Field;
 use ff::{Field as Halo2Field, FromUniformBytes, PrimeField};
 use num_bigint::BigUint;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
@@ -325,4 +325,4 @@ impl FromUniformBytes<64> for TermField {
     }
 }
 
-impl Field for TermField {}
+// impl Field for TermField {}
