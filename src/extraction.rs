@@ -85,12 +85,12 @@ where
         N: FnOnce() -> NR,
     {
         let x: String = name_fn().into();
-        println!("--REGION: {x}");
+        println!("\n-- REGION: {x}");
         self.current_region = Some(x.clone());
     }
 
     fn exit_region(&mut self) {
-        println!("--EXITED REGION: {}", self.current_region.as_ref().unwrap());
+        println!("-- REGION: {}", self.current_region.as_ref().unwrap());
         self.current_region = None;
     }
 
@@ -262,7 +262,7 @@ pub fn print_gates(gates: CircuitGates) {
         .filter(|x| !x.contains(':'))
         .enumerate()
         .for_each(|(idx, gate)| {
-            // println!("{gate}");
+            //println!("{gate}");
             let s = cell_ref_regex
                 .replace_all(
                     selector_regex
@@ -310,10 +310,18 @@ macro_rules! extract {
         )
         .unwrap();
 
-        print_gates(CircuitGates::collect::<Fp, $a<Fp>>(<$a<Fp> as Circuit<
-            Fp,
-        >>::Params::default(
-        )));
+        let test_gates = cs.gates();
+        println!("\n\nGATES");
+        println!("\n\n{:?}\n\n", test_gates);
+
+        let test_lookups = cs.lookups();
+        println!("\n\nLOOKUPS");
+        println!("\n\n{:?}\n\n", test_lookups);
+
+        // print_gates(CircuitGates::collect::<Fp, $a<Fp>>(<$a<Fp> as Circuit<
+        //     Fp,
+        // >>::Params::default(
+        // )));
     };
     ($a:ident, $b:expr, $c:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
@@ -340,28 +348,28 @@ macro_rules! extract {
         >>::Params::default(
         )));
     };
-    ($a:ident, $b:expr, $c:expr) => {
-        use halo2_extr::extraction::{print_gates, ExtractingAssignment};
-        use halo2_extr::field::TermField;
-        use halo2_proofs::dev::CircuitGates;
-        use halo2_proofs::pasta::Fp;
-        use halo2_proofs::plonk::FloorPlanner;
-        let circuit: MyCircuit<TermField> = $c;
+    // ($a:ident, $b:expr, $c:expr) => {
+    //     use halo2_extr::extraction::{print_gates, ExtractingAssignment};
+    //     use halo2_extr::field::TermField;
+    //     use halo2_proofs::dev::CircuitGates;
+    //     use halo2_proofs::pasta::Fp;
+    //     use halo2_proofs::plonk::FloorPlanner;
+    //     let circuit: MyCircuit<TermField> = $c;
 
-        let mut cs = ConstraintSystem::<TermField>::default();
-        let config = $a::<TermField>::configure(&mut cs);
+    //     let mut cs = ConstraintSystem::<TermField>::default();
+    //     let config = $a::<TermField>::configure(&mut cs);
 
-        let mut extr_assn = ExtractingAssignment::<TermField>::new($b);
-        <$a<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
-            &mut extr_assn,
-            &circuit,
-            config,
-            vec![],
-        )
-        .unwrap();
+    //     let mut extr_assn = ExtractingAssignment::<TermField>::new($b);
+    //     <$a<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
+    //         &mut extr_assn,
+    //         &circuit,
+    //         config,
+    //         vec![],
+    //     )
+    //     .unwrap();
 
-        print_gates(CircuitGates::collect::<Fp, $a<Fp>>());
-    };
+    //     print_gates(CircuitGates::collect::<Fp, $a<Fp>>());
+    // };
 }
 
 #[cfg(test)]

@@ -20,11 +20,11 @@ pub enum TermField {
 }
 
 impl TermField {
-    const fn zero() -> Self {
+    pub const fn zero() -> Self {
         TermField::Zero
     }
 
-    const fn one() -> Self {
+    pub const fn one() -> Self {
         TermField::One
     }
 
@@ -325,4 +325,4 @@ impl FromUniformBytes<64> for TermField {
     }
 }
 
-// impl Field for TermField {}
+//impl Field for TermField {}

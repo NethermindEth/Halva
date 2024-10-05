@@ -8,8 +8,10 @@ edition = "2021"
 [dependencies]
 rand_core = { version = "0.6", default-features = false }
 ff = "0.13"
-halo2_frontend = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["circuit-params"], tag = "v0.4.0" }
-halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["circuit-params"], tag = "v0.4.0" }
+halo2_frontend = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["circuit-params", "dev-graph"], tag = "v0.4.0" }
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["circuit-params", "dev-graph"], tag = "v0.4.0" }
+halo2curves = "0.7.0"
+plotters = "0.3.7"
 arrayvec = { version = "0.7.2" }
 regex = "1"
 subtle = { version = "2.5.0" }
@@ -22,7 +24,19 @@ proc-macro2 = "1.0.60"
 name = "fibonacci"
 
 [[example]]
+name = "fibo-table"
+
+[[example]]
 name = "two-chip"
 
 [[example]]
 name = "bytecode"
+
+[[example]]
+name = "lookup"
+
+[[example]]
+name = "layout"
+
+[[example]]
+name = "table"
