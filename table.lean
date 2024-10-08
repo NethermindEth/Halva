@@ -94,7 +94,7 @@ def advice_0_1: Prop := c.Advice 0 1 = 15
 -- REGION: Assign value for lookup range check
 ------GATES-------
 def gate_0: Prop := ∀ row : ℕ,   c.Selector 0 row * (((((((c.Advice  0 (row) * (1 - c.Advice  0 (row))) * (0x2 - c.Advice  0 (row))) * (0x3 - c.Advice  0 (row))) * (0x4 - c.Advice  0 (row))) * (0x5 - c.Advice  0 (row))) * (0x6 - c.Advice  0 (row))) * (0x7 - c.Advice  0 (row))) = 0
-[
+!!Lookups!!: [
     Argument {
         input_expressions: [
             Product(
@@ -157,3 +157,4 @@ def gate_0: Prop := ∀ row : ℕ,   c.Selector 0 row * (((((((c.Advice  0 (row)
         ],
     },
 ]
+!!Shuffles!!: []
