@@ -230,7 +230,9 @@ fn main() {
     ));
 
     let lookups = cs.lookups();
-    println!("{:#?}", lookups);
+    println!("!!Lookups!!: {:#?}", lookups);
+    let shuffles = cs.shuffles();
+    println!("!!Shuffles!!: {:#?}", shuffles);
 }
 
 // #[cfg(test)]
