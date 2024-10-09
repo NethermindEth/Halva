@@ -1,5 +1,5 @@
 use std::{
-    fmt::Display,
+    fmt::Debug, fmt::Display,
     iter::{Product, Sum},
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
@@ -12,11 +12,24 @@ use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 const EXPRESSION_MAX_SIZE: usize = 16384;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+// Field requires Copy, however String is not copyable
+// It would be possible to use a more restricted enum representation of all possible expressions
+// instead in the future if there are efficiency issues
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TermField {
     Zero,
     One,
     Expr(ArrayString<EXPRESSION_MAX_SIZE>),
+}
+
+// TODO fix hack
+//   implementation of decompose-running-sum expects a number starting with 0x
+//   the default implementation of Debug for TermField therefore causes a crash when it cannot remove the 0x prefix
+//   to get around this, a meaningless 0x prefix is added. The output is NOT in hexadecimal
+impl Debug for TermField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", self.to_expr())
+    }
 }
 
 impl TermField {
@@ -28,8 +41,15 @@ impl TermField {
         TermField::One
     }
 
+    // Note this must be called at the start of the extraction, since it adds to the Circuit structure
+    // TODO: Switch to a paradigm in which data is collected rather than printed during extraction, then printed at the end
+    pub fn create_symbol(name: &str) -> Self {
+        println!("  {name}: ZMod P");
+        TermField::from(format!("c.{name}"))
+    }
+
     fn to_expr(&self) -> ArrayString<EXPRESSION_MAX_SIZE> {
-        ArrayString::from(&match self {
+        ArrayString::from(match self {
             TermField::Zero => "0",
             TermField::One => "1",
             TermField::Expr(x) => x,
@@ -45,10 +65,10 @@ impl From<&str> for TermField {
             "1" => Self::One,
             s => {
                 let array_str = ArrayString::from(s);
-                if let Err(_) = array_str {
-                    panic!("{}", s)
+                if let Ok(str) = array_str {
+                    Self::Expr(str)
                 } else {
-                    Self::Expr(array_str.unwrap())
+                    panic!("{}", s)
                 }
             }
         }
@@ -263,7 +283,7 @@ impl Halo2Field for TermField {
 
     fn invert(&self) -> CtOption<Self> {
         CtOption::new(
-            Self::from(format!("{}^(-1)", self.to_string())),
+            Self::from(format!("(({}: ZMod P).inv)", self)),
             Choice::from(1),
         )
     }
@@ -325,4 +345,19 @@ impl FromUniformBytes<64> for TermField {
     }
 }
 
-//impl Field for TermField {}
+// impl Field for TermField {}
+
+// impl PrimeFieldBits for TermField {
+//     type ReprBits = [u64; 4];
+
+//     fn to_le_bits(&self) -> ff::FieldBits<Self::ReprBits> {
+//         // println!("Running to_le_bits for {}", self.to_expr());
+//         let f: Fp = self.to_expr().as_str().parse::<u64>().unwrap().into();
+//         // println!("    Got {}", f.to_le_bits());
+//         f.to_le_bits()
+//     }
+
+//     fn char_le_bits() -> ff::FieldBits<Self::ReprBits> {
+//         todo!()
+//     }
+// }

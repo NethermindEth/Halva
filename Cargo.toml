@@ -20,9 +20,17 @@ proc-macro2 = "1.0.60"
 # zkevm-circuits = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git", features = ["test-circuits"] }
 # eth-types = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git" }
 
-[[example]]
-name = "fibonacci"
+# # privacy-scaling-solutions
+# [[example]]
+# name = "fibonacci"
+# 
+# [[example]]
+# name = "two-chip"
+# 
+# [[example]]
+# name = "bytecode"
 
+#zcash
 [[example]]
 name = "fibo-table"
 
@@ -40,3 +48,6 @@ name = "layout"
 
 [[example]]
 name = "table"
+
+[[example]]
+name = "cond-swap"

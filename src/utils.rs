@@ -1,7 +1,9 @@
 use std::convert::TryFrom;
 
+use halo2_proofs::plonk::{Selector, Column, ColumnType};
 use regex::Regex;
 use std::str::FromStr;
+
 
 #[derive(Debug)]
 pub struct ExtractorError;
@@ -17,9 +19,9 @@ pub enum Halo2Any {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Halo2Column {
-    pub(crate) index: usize,
-    pub(crate) column_type: Halo2Any,
+pub struct Halo2Column {
+    pub index: usize,
+    pub column_type: Halo2Any,
 }
 
 impl Halo2Column {
@@ -28,58 +30,44 @@ impl Halo2Column {
     }
 }
 
-impl TryFrom<&str> for Halo2Column {
+impl<C: ColumnType> TryFrom<&Column<C>> for Halo2Column {
     type Error = ExtractorError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(column: &Column<C>) -> Result<Self, Self::Error> {
         let re = Regex::new(
-            r"Column\s\{\sindex:\s(\d+),\scolumn_type:\s(Advice|Advice \{.*\}|Instance|Fixed)\s\}",
+            r"Column\s\{\sindex:\s(\d+),\scolumn_type:\s(Advice(?: \{.*\})?|Instance|Fixed)\s\}",
         )
         .map_err(|_| ExtractorError)?;
 
-        for cap in re.captures_iter(value) {
-            if cap.len() > 2 {
-                return Ok(Halo2Column::new(
-                    usize::from_str(&cap[1]).map_err(|_| ExtractorError)?,
-                    match &cap[2] {
-                        "Instance" => Halo2Any::Instance,
-                        "Fixed" => Halo2Any::Fixed,
-                        column_type => {
-                            if column_type.starts_with("Advice") {
-                                Halo2Any::Advice
-                            } else {
-                                panic!("Unknown column type \"{}\"", &cap[2])
-                            }
-                        }
-                    },
-                ));
-            } else {
-                return Err(ExtractorError);
-            }
-        }
+        let res = if let Some((_, [index, column_type])) = re.captures_iter(format!("{column:?}").as_str()).next().map(|c| c.extract()) {
+            Ok(Halo2Column::new(
+                usize::from_str(index).map_err(|_| ExtractorError)?,
+                match column_type {
+                    "Instance" => Halo2Any::Instance,
+                    "Fixed" => Halo2Any::Fixed,
+                    _ if column_type.starts_with("Advice") => Halo2Any::Advice,
+                    _ => panic!("Unknown column type \"{}\"", &column_type)
+                },
+            ))
+        } else {
+            Err(ExtractorError)
+        };
 
-        Err(ExtractorError)
+        res
     }
 }
 
-pub(crate) struct Halo2Selector(pub(crate) usize);
+pub struct Halo2Selector(pub usize, pub bool);
 
-impl TryFrom<&str> for Halo2Selector {
-    type Error = ExtractorError;
+// This is required because Assignment is a public trait, yet enable_selector takes a Selector whose row member is pub(crate)
+pub fn extract_selector_row(selector: &Selector) -> Result<usize, ExtractorError> {
+    let re = Regex::new(r"Selector\((\d+),\s(false|true)\)").map_err(|_| ExtractorError)?;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let re = Regex::new(r"Selector\((\d+),\s(.*)\)").map_err(|_| ExtractorError)?;
-
-        for cap in re.captures_iter(&value) {
-            if cap.len() > 2 {
-                return Ok(Halo2Selector(
-                    usize::from_str(&cap[1]).map_err(|_| ExtractorError)?,
-                ));
-            } else {
-                return Err(ExtractorError);
-            }
-        }
-
+    let res = if let Some((_, [col, _enabled])) = re.captures_iter(format!("{selector:?}").as_str()).next().map(|c| c.extract()) {
+        usize::from_str(col).map_err(|_err| ExtractorError)
+    } else {
         Err(ExtractorError)
-    }
+    };
+
+    res
 }
