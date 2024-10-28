@@ -4,10 +4,8 @@ use halo2_proofs::{
     plonk::{Advice, Assigned, Circuit, Column, ConstraintSystem, ErrorFront, Fixed, TableColumn},
     poly::Rotation,
 };
-use halo2curves::pasta::Fp;
-use rand_core::OsRng;
 use std::marker::PhantomData;
-use halo2_extr::{extract, extraction::Target, field::TermField};
+use halo2_extr::{extract, extraction::Target};
 
 /// This represents an advice column at a certain row in the ConstraintSystem
 #[derive(Copy, Clone, Debug)]

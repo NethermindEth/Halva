@@ -1,13 +1,13 @@
+use itertools::Itertools;
 use std::marker::PhantomData;
 
-use halo2_proofs::{
-    arithmetic::Field,
-    circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
-    plonk::{Advice, Circuit, Column, ConstraintSystem, Instance, Selector},
-    poly::Rotation,
-};
+use ff::PrimeField;
+use halo2_extr::{extraction::{print_gates, print_postamble, print_preamble, ExtractingAssignment, Target}, field::TermField};
+use halo2_frontend::{circuit::*, dev::CircuitGates, plonk::*};
+use halo2_proofs::poly::Rotation;
+use halo2curves::bn256::Fq;
 
-use halo2_extr::{extract, extraction::{Target, print_preamble, print_postamble}};
+// https://github.com/icemelon/halo2-examples/blob/master/src/fibonacci/example1.rs
 
 #[derive(Debug, Clone)]
 struct FibonacciConfig {
@@ -19,12 +19,12 @@ struct FibonacciConfig {
 }
 
 #[derive(Debug, Clone)]
-struct FibonacciChip<F: Field> {
+struct FibonacciChip<F: PrimeField> {
     config: FibonacciConfig,
     _marker: PhantomData<F>,
 }
 
-impl<F: Field> FibonacciChip<F> {
+impl<F: PrimeField> FibonacciChip<F> {
     pub fn construct(config: FibonacciConfig) -> Self {
         Self {
             config,
@@ -32,7 +32,8 @@ impl<F: Field> FibonacciChip<F> {
         }
     }
 
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> FibonacciConfig {
+
+    fn configure(meta: &mut ConstraintSystem<F>) -> FibonacciConfig {
         let col_a = meta.advice_column();
         let col_b = meta.advice_column();
         let col_c = meta.advice_column();
@@ -46,8 +47,8 @@ impl<F: Field> FibonacciChip<F> {
 
         meta.create_gate("add", |meta| {
             //
-            // col_a | col_b | col_c | selector |
-            //   a      b        c       s
+            // col_a | col_b | col_c | selector
+            //   a   |   b   |   c   |   s
             //
             let s = meta.query_selector(selector);
             let a = meta.query_advice(col_a, Rotation::cur());
@@ -55,6 +56,7 @@ impl<F: Field> FibonacciChip<F> {
             let c = meta.query_advice(col_c, Rotation::cur());
             vec![s * (a + b - c)]
         });
+
 
         FibonacciConfig {
             col_a,
@@ -69,10 +71,7 @@ impl<F: Field> FibonacciChip<F> {
     pub fn assign_first_row(
         &self,
         mut layouter: impl Layouter<F>,
-    ) -> Result<
-        (AssignedCell<F, F>, AssignedCell<F, F>, AssignedCell<F, F>),
-        halo2_frontend::plonk::Error,
-    > {
+    ) -> Result<(AssignedCell<F, F>, AssignedCell<F, F>, AssignedCell<F, F>), Error> {
         layouter.assign_region(
             || "first row",
             |mut region| {
@@ -83,26 +82,26 @@ impl<F: Field> FibonacciChip<F> {
                     self.config.instance,
                     0,
                     self.config.col_a,
-                    0,
+                    0
                 )?;
 
                 let b_cell = region.assign_advice_from_instance(
-                    || "f(1)",
+                    || "f(a)",
                     self.config.instance,
                     1,
                     self.config.col_b,
-                    0,
+                    0
                 )?;
 
                 let c_cell = region.assign_advice(
                     || "a + b",
                     self.config.col_c,
                     0,
-                    || a_cell.value().copied() + b_cell.value(),
+                    || a_cell.value().copied() + b_cell.value()
                 )?;
 
                 Ok((a_cell, b_cell, c_cell))
-            },
+            }
         )
     }
 
@@ -111,15 +110,25 @@ impl<F: Field> FibonacciChip<F> {
         mut layouter: impl Layouter<F>,
         prev_b: &AssignedCell<F, F>,
         prev_c: &AssignedCell<F, F>,
-    ) -> Result<AssignedCell<F, F>, halo2_frontend::plonk::Error> {
+    ) -> Result<AssignedCell<F, F>, Error> {
         layouter.assign_region(
             || "next row",
             |mut region| {
                 self.config.selector.enable(&mut region, 0)?;
 
                 // Copy the value from b & c in previous row to a & b in current row
-                prev_b.copy_advice(|| "a", &mut region, self.config.col_a, 0)?;
-                prev_c.copy_advice(|| "b", &mut region, self.config.col_b, 0)?;
+                prev_b.copy_advice(
+                    || "a",
+                    &mut region,
+                    self.config.col_a,
+                    0,
+                )?;
+                prev_c.copy_advice(
+                    ||"b",
+                    &mut region,
+                    self.config.col_b,
+                    0
+                )?;
 
                 let c_cell = region.assign_advice(
                     || "c",
@@ -128,8 +137,8 @@ impl<F: Field> FibonacciChip<F> {
                     || prev_b.value().copied() + prev_c.value(),
                 )?;
 
-                Ok(c_cell)
-            },
+                Ok (c_cell)
+            }
         )
     }
 
@@ -138,7 +147,7 @@ impl<F: Field> FibonacciChip<F> {
         mut layouter: impl Layouter<F>,
         cell: &AssignedCell<F, F>,
         row: usize,
-    ) -> Result<(), halo2_frontend::plonk::Error> {
+    ) -> Result<(), Error> {
         layouter.constrain_instance(cell.cell(), self.config.instance, row)
     }
 }
@@ -146,7 +155,7 @@ impl<F: Field> FibonacciChip<F> {
 #[derive(Default)]
 struct MyCircuit<F>(PhantomData<F>);
 
-impl<F: Field> Circuit<F> for MyCircuit<F> {
+impl<F: PrimeField> Circuit<F> for MyCircuit<F> {
     type Config = FibonacciConfig;
     type FloorPlanner = SimpleFloorPlanner;
     type Params = ();
@@ -163,7 +172,7 @@ impl<F: Field> Circuit<F> for MyCircuit<F> {
         &self,
         config: Self::Config,
         mut layouter: impl Layouter<F>,
-    ) -> Result<(), halo2_frontend::plonk::Error> {
+    ) -> Result<(), Error> {
         let chip = FibonacciChip::construct(config);
 
         let (_, mut prev_b, mut prev_c) =
@@ -181,8 +190,30 @@ impl<F: Field> Circuit<F> for MyCircuit<F> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn fibaonacci_example1() {
+        let k = 4;
+        
+        let a = Fp::from(1); // F[0]
+        let b = Fp::from(1); // F[1]
+        let out = Fp::from(55); // F[9]
+
+        let circuit = MyCircuit(PhantomData);
+
+        let mut public_input = vec![a, b, out];
+        let prover = MockProver::run(k, &circuit, vec![public_input.clone()]).unwrap();
+        prover.assert_satisfied();
+
+        public_input[2] += Fp::one();
+        let _prover = MockProver::run(k, &circuit, vec![public_input]).unwrap();
+
+        // Uncomment the following line and the test should fail
+        // _prover.assert_satisfied();
+    }
+}
+
 fn main() {
-    print_preamble("Fibonacci9");
-    extract!(MyCircuit, Target::AdviceGenerator);
-    print_postamble("Fibonacci9");
+
 }

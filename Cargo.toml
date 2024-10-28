@@ -17,28 +17,10 @@ regex = "1"
 subtle = { version = "2.5.0" }
 num-bigint = { version = "0.4.3" }
 proc-macro2 = "1.0.60"
-# zkevm-circuits = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git", features = ["test-circuits"] }
-# eth-types = { git = "https://github.com/ElijahVlasov/zkevm-circuits.git" }
+itertools = "0.13.0"
 
-# # privacy-scaling-solutions
-# [[example]]
-# name = "fibonacci"
-# 
-# [[example]]
-# name = "two-chip"
-# 
-# [[example]]
-# name = "bytecode"
-
-#zcash
 [[example]]
 name = "fibo-table"
-
-[[example]]
-name = "two-chip"
-
-[[example]]
-name = "bytecode"
 
 [[example]]
 name = "lookup"
@@ -49,5 +31,5 @@ name = "layout"
 [[example]]
 name = "table"
 
-[[example]]
-name = "cond-swap"
+# [[example]]
+# name = "cond-swap"

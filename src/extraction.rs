@@ -23,7 +23,7 @@ pub enum Target {
 
 pub struct ExtractingAssignment<F: Field> {
     _marker: PhantomData<F>,
-    // current_region: Option<String>,
+    current_region: Option<String>,
     target: Target,
     copy_count: u32,
     selectors: BTreeMap<usize, BTreeSet<usize>>,
@@ -35,6 +35,7 @@ impl<F: Field> ExtractingAssignment<F> {
     pub fn new(target: Target) -> Self {
         Self {
             _marker: PhantomData,
+            current_region: None,
             target,
             copy_count: 0,
             selectors: BTreeMap::new(),
@@ -88,7 +89,8 @@ impl<F: Field> ExtractingAssignment<F> {
                 .join(" ∧ ")
         };
 
-        println!("def all_copy_constraints: Prop := {copy_constraints_body}");
+        let copy_constraints_args = format!("({}c: Circuit P P_Prime)", if self.copy_count == 0 {"_"}  else {""});
+        println!("def all_copy_constraints {copy_constraints_args}: Prop := {copy_constraints_body}");
 
 
         for (col, row_set) in &self.selectors {
@@ -204,12 +206,12 @@ where
         N: FnOnce() -> NR,
     {
         let x: String = name_fn().into();
-        println!("\n-- REGION: {x}");
+        println!("\n-- Entered region: {x}");
         self.current_region = Some(x.clone());
     }
 
     fn exit_region(&mut self) {
-        println!("-- REGION: {}", self.current_region.as_ref().unwrap());
+        println!("-- Exited region: {}", self.current_region.as_ref().unwrap());
         self.current_region = None;
     }
 
@@ -345,19 +347,18 @@ where
 
     fn pop_namespace(&mut self, _gadget_name: Option<String>) {}
 
-    // privacy-scaling-solutions
-    // fn annotate_column<A, AR>(&mut self, _annotation: A, _column: Column<Any>)
-    // where
-    //     A: FnOnce() -> AR,
-    //     AR: Into<String>,
-    // {
-    //     println!("--Annotate column");
-    // }
+    fn annotate_column<A, AR>(&mut self, _annotation: A, _column: Column<Any>)
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+    {
+        println!("--Annotate column");
+    }
 
-    // fn get_challenge(&self, _challenge: halo2_proofs::plonk::Challenge) -> Value<F> {
-    //     println!("--Get challenge");
-    //     Value::unknown()
-    // }
+    fn get_challenge(&self, _challenge: halo2_proofs::plonk::Challenge) -> Value<F> {
+        println!("--Get challenge");
+        Value::unknown()
+    }
 }
 
 pub fn print_gates(gates: CircuitGates) {
@@ -396,19 +397,19 @@ pub fn print_gates(gates: CircuitGates) {
                 }
             );
         });
-    let all_gates_body = if gate_strings.is_empty() {
-        "true".to_string()
+    if gate_strings.is_empty() {
+        println!("def all_gates (_c Circuit P P_Prime): Prop := true");
     } else {
-        (0..gate_strings.len())
+        let all_gates = (0..gate_strings.len())
             .map(|val| format!("gate_{val} c"))
-            .join(" ∧ ")
+            .join(" ∧ ");
+        println!("def all_gates: Prop := {all_gates}");
     };
-
-    println!("def all_gates: Prop := {all_gates_body}");
 }
 
 pub fn print_preamble(name: &str) {
-    println!("import Mathlib.Data.Nat.Prime");
+    println!("import Mathlib.Data.Nat.Prime.Defs");
+    println!("import Mathlib.Data.Nat.Prime.Basic");
     println!("import Mathlib.Data.ZMod.Defs");
     println!("import Mathlib.Data.ZMod.Basic\n");
 
@@ -428,24 +429,33 @@ pub fn print_postamble(name: &str) {
 
 #[macro_export]
 macro_rules! extract {
-    ($a:ident, $b:expr) => {
+    ($CircuitType:ident, $b:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
         use halo2_extr::field::TermField;
         use halo2_frontend::dev::CircuitGates;
-        use halo2_proofs::halo2curves::pasta::Fp;
+        use halo2_proofs::halo2curves::bn256::Fq;
         use halo2_proofs::plonk::{Circuit, ConstraintSystem, FloorPlanner};
-        let circuit: $a<TermField> = $a::default();
+        let circuit: $CircuitType<TermField> = $CircuitType<TermField>::default();
 
         let mut cs = ConstraintSystem::<TermField>::default();
-        let config = $a::<TermField>::configure(&mut cs, [
-            Column::new(0, Advice),
-            Column::new(1, Advice),
-            Column::new(2, Advice),
-            Column::new(3, Advice),
-            Column::new(4, Advice),
-        ]);
+        let config = $CircuitType::<TermField>::configure(&mut cs);
 
-        // println!("variable {{P: ℕ}} {{P_Prime: Nat.Prime P}} (c: Circuit P P_Prime)");
+        println!("\nvariable {{P: ℕ}} {{P_Prime: Nat.Prime P}} (c: Circuit P P_Prime)");
+
+        let mut extr_assn = ExtractingAssignment::<TermField>::new($b);
+        <$a<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
+            &mut extr_assn,
+            &circuit,
+            config,
+            vec![],
+        )
+        .unwrap();
+
+        extr_assn.print_grouping_props();
+        print_gates(CircuitGates::collect::<Fq, $a<Fq>>(<$a<Fq> as Circuit<
+            Fq,
+        >>::Params::default(
+        )));
 
         let test_gates = cs.gates();
         println!("\n\nGATES");
@@ -454,11 +464,6 @@ macro_rules! extract {
         let test_lookups = cs.lookups();
         println!("\n\nLOOKUPS");
         println!("\n\n{:?}\n\n", test_lookups);
-
-        // print_gates(CircuitGates::collect::<Fp, $a<Fp>>(<$a<Fp> as Circuit<
-        //     Fp,
-        // >>::Params::default(
-        // )));
     };
     ($a:ident, $b:expr, $c:expr) => {
         use halo2_extr::extraction::{print_gates, ExtractingAssignment};
