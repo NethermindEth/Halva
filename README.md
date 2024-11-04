@@ -1,3 +1,5 @@
+Please note this repository is heavily WIP. We have implemented fixed and instance assignments, copy constraints, and gates, are part way through implementing lookups, and are looking into extending the model to rule out edge cases, especially as gates approach the end of the table. We also will likely add a variable k to enforce a table length of 2^k.
+
 A brief tutorial
 ---------------------
 To extract a circuit into Lean4 one needs to write an extracting program first. It is a stand alone executable that depends on the circuit being extracted and the extraction library provided by this repository. It can be as simple as one `main.rs` file. Let us outline how one can write an extracting program.
