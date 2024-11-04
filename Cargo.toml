@@ -18,6 +18,7 @@ subtle = { version = "2.5.0" }
 num-bigint = { version = "0.4.3" }
 proc-macro2 = "1.0.60"
 itertools = "0.13.0"
+num-traits = "0.2.19"
 
 [[example]]
 name = "fibo-table"

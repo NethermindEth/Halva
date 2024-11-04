@@ -604,6 +604,7 @@ dependencies = [
  "halo2curves",
  "itertools",
  "num-bigint",
+ "num-traits",
  "plotters",
  "proc-macro2",
  "rand_core",

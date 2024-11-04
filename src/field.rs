@@ -315,6 +315,7 @@ impl PrimeField for TermField {
         Self::Repr::default()
     }
 
+    // TODO implement as necessary
     fn is_odd(&self) -> Choice {
         Choice::from(1)
     }
