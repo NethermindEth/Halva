@@ -462,7 +462,6 @@ impl ExtractingAssignment<TermField> {
         println!("def assertions (c: ValidCircuit P P_Prime): Prop :=");
         println!("  true");
 
-        // TODO phases
         for current_phase in cs.phases() {
             prover.current_phase = current_phase;
             ConcreteCircuit::FloorPlanner::synthesize(
@@ -794,7 +793,7 @@ pub fn expression_to_value_string(expr: &Expression<TermField>, row_name: &str) 
         Expression::Selector(selector) => format!("c.get_selector {} {row_name}", selector.0),
         Expression::Fixed(query) => format_lookup("c.get_fixed", query.column_index(), query.rotation().0),
         Expression::Advice(query) => format_lookup("c.get_advice", query.column_index(), query.rotation().0),
-        Expression::Instance(query) => format_lookup("c.get_isntance", query.column_index(), query.rotation().0),
+        Expression::Instance(query) => format_lookup("c.get_instance", query.column_index(), query.rotation().0),
         Expression::Challenge(challenge) => format!("c.get_challenge {}", challenge.index()),
         Expression::Negated(expression) => format!("-({})", expression_to_value_string(expression, row_name)),
         Expression::Sum(expression, expression1) =>
