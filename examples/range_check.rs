@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use ff::PrimeField;
-use halo2_extr::{extraction::Target, field::TermField, extraction::ExtractingAssignment};
+use halo2_extr::{field::TermField, extraction::ExtractingAssignment};
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Value, SimpleFloorPlanner},
     plonk::{Advice, Column, ConstraintSystem, Constraints, Expression, Selector, Circuit, ErrorFront, FloorPlanner},
@@ -113,26 +113,10 @@ impl<F: PrimeField, const RANGE: usize> RangeCheckConfig<F, RANGE> {
     }
 
 fn main() {
-    use halo2_proofs::halo2curves::bn256::Fq;
-    use halo2_frontend::dev::CircuitGates;
-    use halo2_extr::extraction::print_gates;
-
     const RANGE: usize = 10;
     let circuit = MyCircuit::<TermField, RANGE> {value: Value::known(TermField::from(5).into())};
 
-    let mut cs = ConstraintSystem::<TermField>::default();
-    let config = MyCircuit::<TermField, RANGE>::configure(&mut cs);
-
-    let mut extr_assn = ExtractingAssignment::<TermField>::new(Target::AdviceGenerator);
-    <MyCircuit<TermField, RANGE> as Circuit<TermField>>::FloorPlanner::synthesize(
-        &mut extr_assn,
-        &circuit,
-        config,
-        vec![],
-    )
-    .unwrap();
-
-    print_gates(CircuitGates::collect::<Fq, MyCircuit<Fq,RANGE>>(<MyCircuit<Fq, RANGE> as Circuit<Fq,>>::Params::default()));
+    ExtractingAssignment::run(&circuit, "RangeCheck", &[]);
 }
 
 //     #[test]

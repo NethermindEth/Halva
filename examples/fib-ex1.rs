@@ -1,11 +1,9 @@
-use itertools::Itertools;
 use std::marker::PhantomData;
 
 use ff::PrimeField;
-use halo2_extr::{extraction::{print_gates, print_postamble, print_preamble, ExtractingAssignment, Target}, field::TermField};
-use halo2_frontend::{circuit::*, dev::CircuitGates, plonk::*};
+use halo2_extr::{extraction::{print_postamble, print_preamble, ExtractingAssignment}, field::TermField};
+use halo2_frontend::{circuit::*, plonk::*};
 use halo2_proofs::poly::Rotation;
-use halo2curves::bn256::Fq;
 
 // https://github.com/icemelon/halo2-examples/blob/master/src/fibonacci/example1.rs
 
@@ -222,25 +220,6 @@ mod tests {
 }
 
 fn main() {
-    print_preamble("Fibonacci.Ex1");
     let circuit = MyCircuit::<TermField>(PhantomData);
-    let mut cs = ConstraintSystem::<TermField>::default();
-    let config = MyCircuit::<TermField>::configure(&mut cs);
-
-    println!("variable {{P: ℕ}} {{P_Prime: Nat.Prime P}} (c: Circuit P P_Prime)");
-
-    let mut extr_assn = ExtractingAssignment::<TermField>::new(Target::AdviceGenerator);
-    <MyCircuit<TermField> as Circuit<TermField>>::FloorPlanner::synthesize(
-        &mut extr_assn,
-        &circuit,
-        config,
-        vec![]
-    ).unwrap();
-
-    extr_assn.print_grouping_props();
-    print_gates(CircuitGates::collect::<Fq, MyCircuit<Fq>>(
-        <MyCircuit<Fq> as Circuit<Fq>>::Params::default()
-    ));
-
-    print_postamble("Fibonacci.Ex1");
+    ExtractingAssignment::run(&circuit, "Fibonacci.Ex1", &[]);
 }

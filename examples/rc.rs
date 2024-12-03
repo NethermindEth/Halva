@@ -226,10 +226,7 @@ impl<F: PrimeField, const RANGE: usize, const LOOKUP_RANGE: usize> Circuit<F>
 }
 
 fn main() {
-    use halo2_extr::extraction::print_gates;
-    use halo2_frontend::dev::CircuitGates;
-    use halo2_proofs::halo2curves::bn256::Fq;
-    use halo2_extr::{extraction::Target, field::TermField, extraction::ExtractingAssignment};
+    use halo2_extr::{field::TermField, extraction::ExtractingAssignment};
 
     const RANGE: usize = 8;
     const LOOKUP_RANGE: usize = 20;
@@ -238,26 +235,7 @@ fn main() {
         large_value: Value::known(TermField::from(2 as u64).into()),
     };
 
-    let mut cs = ConstraintSystem::<TermField>::default();
-    let config = MyCircuit::<TermField, RANGE, LOOKUP_RANGE>::configure(&mut cs);
-
-    let mut extr_assn = ExtractingAssignment::<TermField>::new(Target::AdviceGenerator);
-    <MyCircuit<TermField, RANGE, LOOKUP_RANGE> as Circuit<TermField>>::FloorPlanner::synthesize(
-        &mut extr_assn,
-        &circuit,
-        config,
-        vec![],
-    )
-    .unwrap();
-
-    print_gates(CircuitGates::collect::<Fq, MyCircuit<Fq, RANGE, LOOKUP_RANGE>>(
-        <MyCircuit<Fq, RANGE, LOOKUP_RANGE> as Circuit<Fq>>::Params::default(),
-    ));
-
-    let lookups = cs.lookups();
-    println!("{:#?}", lookups);
-    // let gates = cs.gates();
-    // println!("{:#?}", lookups);
+    ExtractingAssignment::run(&circuit, "RC", &[]);
 }
 
 // // Now let's test it! Here we define a circuit with a single value. and in syntesize function we assign that value

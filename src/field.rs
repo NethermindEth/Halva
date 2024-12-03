@@ -1,26 +1,48 @@
 use std::{
-    fmt::Debug, fmt::Display,
-    iter::{Product, Sum},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    fmt::{Debug, Display}, iter::{Product, Sum}, ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign}
 };
 
 use arrayvec::ArrayString;
-// use eth_types::Field;
-use ff::{Field as Halo2Field, FromUniformBytes, PrimeField};
+use ff::{Field, FromUniformBytes, PrimeField};
 use num_bigint::BigUint;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 const EXPRESSION_MAX_SIZE: usize = 16384;
 
-// Field requires Copy, however String is not copyable
-// It would be possible to use a more restricted enum representation of all possible expressions
-// instead in the future if there are efficiency issues
-#[derive(Clone, Copy, PartialEq, Eq)]
+// Field requires Copy, Sized, and 'static
+// This means we have to use a stack allocated, dynamically generatable, fixed length string
+#[derive(Clone, Copy)]
 pub enum TermField {
     Zero,
     One,
     Expr(ArrayString<EXPRESSION_MAX_SIZE>),
+    TwoInv,
+    MultiplicativeGenerator,
+    S,
+    RootOfUnity,
+    RootOfUnityInv,
+    Delta
 }
+
+impl PartialEq for TermField {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            
+            (Self::Expr(l0), Self::Expr(r0)) => if l0 == r0 {
+                true
+            } else {
+                #[cfg(not(feature = "unsafe-equality"))]
+                panic!("Unable to determine whether {} and {} are equal without the unsafe-equality feature (which will consider them not equal)", l0, r0);
+
+                #[cfg(feature = "unsafe-equality")]
+                false
+            },
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl Eq for TermField {}
 
 // TODO fix hack
 //   implementation of decompose-running-sum expects a number starting with 0x
@@ -41,11 +63,13 @@ impl TermField {
         TermField::One
     }
 
-    // Note this must be called at the start of the extraction, since it adds to the Circuit structure
-    // TODO: Switch to a paradigm in which data is collected rather than printed during extraction, then printed at the end
+    pub const fn two_inv() -> Self {
+        TermField::TwoInv
+    }
+
+    // Note that this requires the symbol also be passed to print_preamble
     pub fn create_symbol(name: &str) -> Self {
-        println!("  {name}: ZMod P");
-        TermField::from(format!("c.{name}"))
+        TermField::from(format!("c.1.sym_{name}"))
     }
 
     fn to_expr(&self) -> ArrayString<EXPRESSION_MAX_SIZE> {
@@ -53,8 +77,18 @@ impl TermField {
             TermField::Zero => "0",
             TermField::One => "1",
             TermField::Expr(x) => x,
+            TermField::TwoInv => "(2: ZMod P).inv",
+            TermField::MultiplicativeGenerator => "c.mult_gen",
+            TermField::S => "c.S",
+            TermField::RootOfUnity => "c.root_of_unity",
+            TermField::RootOfUnityInv => "c.root_of_unity.inv",
+            TermField::Delta => "c.delta",
         })
         .unwrap()
+    }
+
+    pub fn create_s() -> Self {
+        Self::from("S")
     }
 }
 
@@ -255,22 +289,30 @@ impl<'a> Product<&'a TermField> for TermField {
 
 impl PartialOrd for TermField {
     fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
+        #[cfg(not(feature = "unsafe-ord"))]
+        panic!("partial_cmp requires the unsafe-ord feature enabled because it cannot be calculated correctly for symbolic values. Enabling it will return a placeholder value (Less)");
+
+        #[cfg(feature = "unsafe-ord")]
         Some(std::cmp::Ordering::Less)
     }
 }
 
 impl Ord for TermField {
     fn cmp(&self, _other: &Self) -> std::cmp::Ordering {
-        std::cmp::Ordering::Less
+        #[cfg(not(feature = "unsafe-ord"))]
+        panic!("cmp requires the unsafe-ord feature enabled because it cannot be calculated correctly for symbolic values. Enabling it will return a placeholder value (Less)");
+
+        #[cfg(feature = "unsafe-ord")]
+        Some(std::cmp::Ordering::Less)
     }
 }
 
-impl Halo2Field for TermField {
+impl Field for TermField {
     const ZERO: Self = Self::zero();
     const ONE: Self = Self::one();
 
     fn random(_rng: impl rand_core::RngCore) -> Self {
-        panic!("Not supposed to call \"random\"")
+        panic!("Random with a random number generator is not supported. Use create_symbol for an unknown value")
     }
 
     fn square(&self) -> Self {
@@ -282,6 +324,10 @@ impl Halo2Field for TermField {
     }
 
     fn invert(&self) -> CtOption<Self> {
+        #[cfg(not(feature = "unsafe-invert"))]
+        panic!("Field::invert requires the unsafe-invert flag. This is because it is not always possible to determine whether a TermField is equal to zero");
+
+        #[cfg(feature = "unsafe-invert")]
         CtOption::new(
             Self::from(format!("(({}: ZMod P).inv)", self)),
             Choice::from(1),
@@ -289,7 +335,7 @@ impl Halo2Field for TermField {
     }
 
     fn sqrt_ratio(_num: &Self, _div: &Self) -> (Choice, Self) {
-        panic!("Not supposed to call \"sqrt_ratio\"")
+        panic!("Sqrt_ratio is not supported, because it is not possible to determine whether a TermField equals zero. Hence the Choice return cannot be determined")
     }
 }
 
@@ -303,40 +349,80 @@ impl From<u64> for TermField {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct TermFieldBytes (ArrayString<EXPRESSION_MAX_SIZE>);
+
+impl Default for TermFieldBytes {
+    fn default() -> Self {
+        Self(ArrayString::<EXPRESSION_MAX_SIZE>::default())
+    }
+}
+
+impl AsMut<[u8]> for TermFieldBytes {
+    fn as_mut(&mut self) -> &mut [u8] {
+        todo!()
+    }
+}
+
+impl AsRef<[u8]> for TermFieldBytes {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_str().as_bytes()
+    }
+}
+
 impl PrimeField for TermField {
-    type Repr = [u8; 32];
+    type Repr = TermFieldBytes;
 
     fn from_repr(repr: Self::Repr) -> CtOption<Self> {
-        let x = BigUint::from_bytes_le(&repr);
-        CtOption::new(Self::from(x.to_str_radix(10)), Choice::from(1))
+        #[cfg(all(feature = "repr-text", feature = "repr-number"))]
+        compile_error!("features `halo2-extractor/repr-text` and `halo2-extractor/repr-number` are mutually exclusive");
+
+        #[cfg(not(any(feature = "repr-text", feature = "repr-number")))]
+        panic!("from_repr requires either the repr-text flag or the repr-number feature to be enabled");
+
+        #[cfg(feature = "repr-number")]
+        {
+            let x = BigUint::from_bytes_le(&repr.0.as_bytes());
+            CtOption::new(Self::from(x.to_str_radix(10)), Choice::from(1))
+        }
+
+        #[cfg(feature = "repr-text")]
+        {
+            CtOption::new(Self::Expr(repr.0), Choice::from(1))
+        }
     }
 
     fn to_repr(&self) -> Self::Repr {
-        Self::Repr::default()
+        #[cfg(not(feature = "repr-text"))]
+        unimplemented!("to_repr requires the repr-text feature");
+        
+        #[cfg(feature = "repr-text")]
+        TermFieldBytes(self.to_expr())
     }
 
-    // TODO implement as necessary
     fn is_odd(&self) -> Choice {
-        Choice::from(1)
+        unimplemented!("Cannot deterministically decide whether a TermField is odd")
     }
 
-    const MODULUS: &'static str = "214";
+    const MODULUS: &'static str = "P";
 
-    const NUM_BITS: u32 = 100;
+    const NUM_BITS: u32 = unimplemented!();
 
-    const CAPACITY: u32 = 100;
+    const CAPACITY: u32 = unimplemented!();
 
-    const TWO_INV: Self = Self::zero();
+    const TWO_INV: Self = Self::TwoInv;
 
-    const MULTIPLICATIVE_GENERATOR: Self = Self::zero();
+    const MULTIPLICATIVE_GENERATOR: Self = Self::MultiplicativeGenerator;
 
-    const S: u32 = 100;
+    // The value of S cannot be known at the Rust level
+    // However the create_s method does exist for referring to it at the Lean level
+    const S: u32 = unimplemented!();
 
-    const ROOT_OF_UNITY: Self = Self::zero();
+    const ROOT_OF_UNITY: Self = Self::RootOfUnity;
 
-    const ROOT_OF_UNITY_INV: Self = Self::zero();
+    const ROOT_OF_UNITY_INV: Self = Self::RootOfUnityInv;
 
-    const DELTA: Self = Self::zero();
+    const DELTA: Self = Self::Delta;
 }
 
 impl FromUniformBytes<64> for TermField {
