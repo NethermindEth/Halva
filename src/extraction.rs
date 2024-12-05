@@ -280,6 +280,15 @@ impl ExtractingAssignment<TermField> {
         self.print_copy_constraints();
         self.print_selectors();
         self.print_fixed();
+        // Advice phase
+        {
+            println!("def advice_phase (c: ValidCircuit P P_Prime) : ℕ → ℕ :=");
+            println!("  λ col => match col with");
+            for (col, phase) in cs.advice_column_phase().iter().enumerate() {
+                println!("  | {col} => {phase}");
+            }
+            println!("  | _ => 0");
+        }
 
         cs
             .gates()
@@ -448,14 +457,11 @@ impl ExtractingAssignment<TermField> {
         namespace: &str,
         symbol_names: &[&str]
     ) -> Result<(), Error> {
-        print_preamble(namespace, symbol_names);
-
+        
         let mut cs = ConstraintSystem::default();
         let config = ConcreteCircuit::configure_with_params(&mut cs, circuit.params());
         let cs = cs;
-
-        println!("def sufficient_rows (c: ValidCircuit P P_Prime) : Prop :=");
-        println!("  c.n ≥ {} --cs.minimum_rows", cs.minimum_rows());
+        print_preamble(namespace, symbol_names, &cs);
 
         let mut prover = ExtractingAssignment::new();
 
@@ -639,7 +645,7 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
     }
 }
 
-pub fn print_preamble(namespace: &str, symbol_names: &[&str]) {
+pub fn print_preamble(namespace: &str, symbol_names: &[&str], cs: &ConstraintSystem<TermField>) {
     println!("import Mathlib.Data.Nat.Prime.Defs");
     println!("import Mathlib.Data.Nat.Prime.Basic");
     println!("import Mathlib.Data.ZMod.Defs");
@@ -669,10 +675,11 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str]) {
     
     println!("structure Circuit (P: ℕ) (P_Prime: Nat.Prime P) :=");
     println!("  Advice: ℕ → ℕ → CellValue P");
+    println!("  AdvicePhase: ℕ → ℕ");
     println!("  Fixed: ℕ → ℕ → CellValue P");
     println!("  Instance: ℕ → ℕ → InstanceValue P");
     println!("  Selector: ℕ → ℕ → ZMod P");
-    println!("  Challenges: ℕ → ℕ → ZMod P");
+    println!("  Challenges: (ℕ → ℕ → CellValue P) → ℕ → ℕ → ZMod P");
     println!("  num_blinding_factors: ℕ");
     println!("  S: ℕ");
     println!("  T: ℕ");
@@ -729,7 +736,11 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str]) {
     println!("⟩");
     println!("def Circuit.isValid (c: Circuit P P_Prime) : Prop :=");
     println!("  S_T_from_P c.S c.T P ∧");
-    println!("  multiplicative_generator P c.mult_gen");
+    println!("  multiplicative_generator P c.mult_gen ∧ (");
+    println!("  ∀ advice1 advice2: ℕ → ℕ → CellValue P, ∀ phase: ℕ,");
+    println!("    (∀ row col, (col < {} ∧ c.AdvicePhase col ≤ phase) → advice1 col row = advice2 col row) →", cs.num_advice_columns());
+    println!("    (∀ i, c.Challenges advice1 i phase = c.Challenges advice2 i phase)");
+    println!("  )");
 
     println!("abbrev ValidCircuit (P: ℕ) (P_Prime: Nat.Prime P) : Type := {{c: Circuit P P_Prime // c.isValid}}");
     println!("namespace ValidCircuit");
@@ -742,7 +753,7 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str]) {
     println!("def get_selector (c: ValidCircuit P P_Prime) : ℕ → ℕ → Value P :=");
     println!("  λ col row => .Real (c.1.Selector col row)");
     println!("def get_challenge (c: ValidCircuit P P_Prime) : ℕ → ℕ → Value P :=");
-    println!("  λ idx phase => .Real (c.1.Challenges idx phase)");
+    println!("  λ idx phase => .Real (c.1.Challenges c.1.Advice idx phase)");
     println!("def k (c: ValidCircuit P P_Prime) := c.1.k");
     println!("def n (c: ValidCircuit P P_Prime) := 2^c.k");
     println!("def usable_rows (c: ValidCircuit P P_Prime) := c.n - (c.1.num_blinding_factors + 1)");
@@ -759,6 +770,9 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str]) {
     println!("    inv (shuffle row) = row ∧");
     println!("    (row ≥ c.usable_rows → shuffle row = row)");
 
+    println!("def sufficient_rows (c: ValidCircuit P P_Prime) : Prop :=");
+    println!("  c.n ≥ {} --cs.minimum_rows", cs.minimum_rows());
+
     println!("--End preamble");
 }
 
@@ -768,6 +782,7 @@ pub fn print_postamble(name: &str, cs: &ConstraintSystem<TermField>) {
     println!("  c.1.num_blinding_factors = {} ∧", cs.blinding_factors());
     println!("  c.1.Selector = selector_func c ∧");
     println!("  c.1.Fixed = fixed_func c ∧");
+    println!("  c.1.AdvicePhase = advice_phase c ∧");
     println!("  assertions c  ∧");
     println!("  all_gates c ∧");
     println!("  all_copy_constraints c ∧");
