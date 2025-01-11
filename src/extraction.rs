@@ -1,5 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+use std::fs;
 use std::marker::PhantomData;
+use std::path::Path;
 
 use halo2_frontend::plonk::sealed::SealedPhase;
 use halo2_frontend::plonk::{sealed, Phase};
@@ -13,30 +15,55 @@ use halo2_proofs::{
 };
 
 use crate::field::TermField;
+use crate::utils::{get_group_annotations, group_values, make_lean_comment, print_grouped_props, update_column_annotation, update_row_annotation};
 
 const GROUPING_SIZE: usize = 10;
 
 pub struct ExtractingAssignment<F: Field> {
     _marker: PhantomData<F>,
+    advice_column_annotations: BTreeMap<usize, (Option<String>, BTreeMap<usize, String>)>,
     current_region: Option<String>,
     copies: Vec<((Column<Any>, usize), (Column<Any>, usize))>,
-    selectors: BTreeMap<usize, BTreeSet<usize>>,
+    selectors: BTreeMap<usize, BTreeMap<usize, String>>,
     fixed: BTreeMap<usize, BTreeMap<usize, String>>,
+    fixed_column_annotations: BTreeMap<usize, (Option<String>, BTreeMap<usize, String>)>,
     fixed_fill: BTreeMap<usize, (usize, String)>,
+    instance_column_annotations: BTreeMap<usize, (Option<String>, BTreeMap<usize, String>)>,
     current_phase: sealed::Phase,
+    usable_rows_filename: String,
+}
+
+impl<F: Field> Drop for ExtractingAssignment<F> {
+    fn drop(&mut self) {
+        std::fs::remove_file(&self.usable_rows_filename).expect("Failed to delete usable_rows file. Feel free to manually delete");
+    }
 }
 
 // impl<F: Field + From<String> + Display> ExtractingAssignment<F> {
 impl ExtractingAssignment<TermField> {
     pub fn new() -> Self {
+        let usable_rows_filename = if Path::new("./usable_rows").exists() {
+            let mut i = 1;
+            while Path::new(&format!("./usable_rows_{i}")).exists() {
+                i += 1;
+            }
+            format!("usable_rows_{i}")
+        } else {
+            "usable_rows".to_string()
+        };
+        fs::write(&usable_rows_filename, "0").expect("Failed to write to usable_rows");
         Self {
             _marker: PhantomData,
+            advice_column_annotations: BTreeMap::new(),
             current_region: None,
             copies: vec![],
             selectors: BTreeMap::new(),
             fixed: BTreeMap::new(),
+            fixed_column_annotations: BTreeMap::new(),
             fixed_fill: BTreeMap::new(),
+            instance_column_annotations: BTreeMap::new(),
             current_phase: FirstPhase.to_sealed(),
+            usable_rows_filename,
         }
     }
 
@@ -45,82 +72,30 @@ impl ExtractingAssignment<TermField> {
     }
 
     fn print_copy_constraints(&self) {
-        if self.copies.len() == 0 {
-            println!("def all_copy_constraints (_c: ValidCircuit P P_Prime): Prop := true");
-        } else {
-            for (idx, ((left_column, left_row), (right_column, right_row))) in self.copies.iter().enumerate() {
-                let lhs = match left_column.column_type() {
-                    Any::Advice => format!("c.1.Advice {} {}", left_column.index(), left_row),
-                    Any:: Fixed => format!("c.1.Fixed {} {}", left_column.index(), left_row),
-                    Any::Instance => format!("↑(c.1.Instance {} {})", left_column.index(), left_row),
-                };
-                let rhs = match right_column.column_type() {
-                    Any::Advice => format!("c.1.Advice {} {}", right_column.index(), right_row),
-                    Any:: Fixed => format!("c.1.Fixed {} {}", right_column.index(), right_row),
-                    Any::Instance => format!("↑(c.1.Instance {} {})", right_column.index(), right_row),
-                };
-                println!("def copy_{idx} (c: ValidCircuit P P_Prime): Prop := {lhs} = {rhs}");
-            }
 
-            if GROUPING_SIZE < 2 {
-                let copy_constraints_body = 
-                    (0..self.copies.len())
-                        .map(|val| format!("copy_{val} c"))
-                        .join(" ∧ ");
-    
-                println!("def all_copy_constraints (c: ValidCircuit P P_Prime): Prop :=");
-                println!("  {copy_constraints_body}");    
-            } else {
-                // Group the props into groups of size GROUPING_SIZE,
-                // repeating recursively until all are accounted for
-                let depth = self.copies.len().ilog(GROUPING_SIZE) + 1;
-                for power in 1..depth {
-                    let size = GROUPING_SIZE.pow(power);
-                    let subgroup_size = GROUPING_SIZE.pow(power-1);
-                    let mut start = 0;
-                    let mut end = std::cmp::min(self.copies.len(), start + size);
-                    while start < end - 1 {
-                        println!("def copy_{start}_to_{} (c: ValidCircuit P P_Prime) : Prop :=", end-1);
-                        let mut body = vec![];
-                        let mut subgroup_start = start;
-                        while subgroup_start < end {
-                            let subgroup_end = std::cmp::min(end, subgroup_start + subgroup_size);
-                            if subgroup_end == subgroup_start + 1 {
-                                body.push(format!("copy_{subgroup_start} c"));
-                            } else {
-                                body.push(format!("copy_{subgroup_start}_to_{} c", subgroup_end-1));
-                            }
-                            subgroup_start += subgroup_size;
-                        }
-                        println!("  {}", body.join(" ∧ "));
-    
-                        start = std::cmp::min(self.copies.len(), start + size);
-                        end = std::cmp::min(self.copies.len(), end + size);
-                    }
-                }
-                println!("def all_copy_constraints (c: ValidCircuit P P_Prime): Prop :=");
-    
-                let mut body = vec![];
-                let mut start = 0;
-                let size = GROUPING_SIZE.pow(depth-1);
-                while start < self.copies.len() {
-                    let end = std::cmp::min(self.copies.len(), start + size);
-                    if end == start + 1 {
-                        body.push(format!("copy_{start} c"));
-                    } else {
-                        body.push(format!("copy_{start}_to_{} c", end-1));
-                    }
-                    start += size;
-                }
-                println!("  {}", body.join(" ∧ "));
+        let format_side = |col: &Column<Any>, row| {
+            match col.column_type() {
+                Any::Advice => format!("c.get_advice {} {}", col.index(), row),
+                Any::Fixed => format!("c.get_fixed {} {}", col.index(), row),
+                Any::Instance => format!("c.get_instance {} {}", col.index(), row),
             }
-        } 
+        };
+
+        let props = self
+            .copies
+            .iter()
+            .map(|((left_column, left_row), (right_column, right_row))| {
+                format!("{} = {}", format_side(left_column, left_row), format_side(right_column, right_row))
+            })
+            .collect_vec();
+
+        print_grouped_props("copy_", "all_copy_constraints", &props, GROUPING_SIZE);
     }
 
-    // TODO grouping
+    // TODO grouping, annotations
     fn print_selectors(&self) {
         for (col, row_set) in &self.selectors {
-            if let Some(&start) = row_set.first() {
+            if let Some((&start, _)) = row_set.first_key_value() {
                 let runs = {
                     let mut start = start;
                     // End is inclusive
@@ -128,7 +103,7 @@ impl ExtractingAssignment<TermField> {
                     let mut runs = vec![];
     
                     // Iterate through the true rows, to collect the consecutive runs
-                    for &i in row_set.iter().skip(1) {
+                    for (&i, _) in row_set.iter().skip(1) {
                         if end == i - 1 {
                             // We have found a row that connects to the current run
                             end = i;
@@ -173,167 +148,216 @@ impl ExtractingAssignment<TermField> {
 
     fn print_fixed(&self) {
         for (col, row_set) in &self.fixed {
-            if row_set.is_empty() {
-                println!("def fixed_func_col_{col} (c: ValidCircuit P P_Prime) : ℕ → CellValue P :=");
-                println!("  λ row => .Unassigned");
-            } else if row_set.len() <= GROUPING_SIZE {
-                println!("def fixed_func_col_{col} (c: ValidCircuit P P_Prime) : ℕ → CellValue P :=");
-                println!("  λ row =>");
-                let body = row_set
-                    .iter()
-                    .map(|(row, val)| {
-                        format!("if row = {row} then .Assigned {val}")
-                    })
-                    .join("\n  else ");
-                println!("  {body}");
-                if let Some ((fill_row, fill_val)) = self.fixed_fill.get(col) {
-                    println!("  else if row ≥ {fill_row} then .Assigned {fill_val}");
-                }
-                println!("  else .Unassigned");
-            } else {
-                let rows = row_set.iter().collect_vec();
+            // (value, start, end, annotations already printed)
+            let mut entries = group_values(row_set)
+                .into_iter()
+                .map(|(a,b,c)| (a,b,c,false))
+                .collect_vec();
 
-                let mut i = 0;
-                let mut boundaries = vec![];
-                let mut lower_bound = 0;
-                while i < rows.len() {
-                    let end_index = std::cmp::min(i + GROUPING_SIZE, rows.len());
-                    let end_row = rows[end_index - 1].0;
-                    println!("def fixed_func_col_{col}_{}_to_{} (c: ValidCircuit P P_Prime) : ℕ → CellValue P :=", lower_bound, *end_row);
-                    println!("  λ row =>");
-                    let body = (i..end_index)
-                        .map(|idx| {
-                            format!("if row = {} then .Assigned {}", rows[idx].0, rows[idx].1)
-                        })
-                        .join("\n  else ");
-                    println!("  {body}");
-                    println!("  else .Unassigned");
-                    boundaries.push(*end_row);
-                    lower_bound = end_row + 1;
-                    i += GROUPING_SIZE;
-                }
+            assert!(GROUPING_SIZE > 1);
 
-                while boundaries.len() > GROUPING_SIZE {
-                    let mut new_boundaries = vec![];
-                    let mut i = 0;
-                    let mut lower_bound: usize = 0;
-                    loop {
-                        let slice = boundaries.iter().skip(i).take(GROUPING_SIZE).collect_vec();
-                        if slice.is_empty() {
-                            break;
-                        } else if slice.len() == 1 {
-                            new_boundaries.push(*slice[0]);
-                            break;
-                        } else {
-                            i += GROUPING_SIZE;
-                        }
-
-                        println!("def fixed_func_col_{col}_{lower_bound}_to_{} (c: ValidCircuit P P_Prime) : ℕ → CellValue P :=", slice[slice.len()-1]);
+            while entries.len() > GROUPING_SIZE {
+                let mut new_entries = vec![];
+    
+                while entries.len() > GROUPING_SIZE {
+                    {
+                        let start = entries[0].1;
+                        let end = entries[GROUPING_SIZE-1].2.unwrap_or(entries[GROUPING_SIZE-1].1);
+                        let name = format!("fixed_func_col_{col}_{start}_to_{end}");
+                        println!("def {name} (c: ValidCircuit P P_Prime) : ℕ → ZMod P :=");
                         println!("  λ row =>");
-
-                        let mut body = vec![];
-                        for upper_bound in slice.iter() {
-                            body.push(format!("if row ≤ {upper_bound} then fixed_func_col_{col}_{lower_bound}_to_{upper_bound} c row"));
-                            lower_bound = **upper_bound + 1;
-                        }
-
-                        println!("  {}", body.join("\n  else "));
-                        println!("  else .Unassigned");
-                        
-                        new_boundaries.push(*slice[slice.len()-1]);
-                        lower_bound = slice[slice.len()-1] + 1;
+                        new_entries.push((
+                            format!("{name} c row"),
+                            start,
+                            Some(end),
+                            true
+                        ));
                     }
-                    boundaries = new_boundaries;
+                    let mut first = true;
+                    for _ in 0..GROUPING_SIZE {
+                        let value = &entries[0].0;
+                        let start = entries[0].1;
+                        let prefix = if first {
+                            first = false;
+                            "  "
+                        } else {
+                            "  else "
+                        };
+                        let print_annotations = !entries[0].3;
+                        if let Some(end) = entries[0].2 {
+                            let annotation = match (print_annotations, self.fixed_column_annotations.get(&col)) {
+                                (true, Some((_, row_annotations))) => get_group_annotations(row_annotations, start, end),
+                                _ => None,
+                            };
+                            
+                            if let Some(annotation) = annotation {
+                                if annotation.contains("\n") {
+                                    println!("{annotation}");
+                                    println!("{prefix}if row ≥ {start} ∧ row ≤ {end} then {value}")
+                                } else {
+                                    println!("{prefix}if row ≥ {start} ∧ row ≤ {end} then {value} -- {annotation}")
+                                }
+                            } else {
+                                println!("{prefix}if row ≥ {start} ∧ row ≤ {end} then {value}")
+                            }
+                        } else {
+                            let annotation = match (print_annotations, self.fixed_column_annotations.get(&col)) {
+                                (true, Some((_, row_annotations))) => get_group_annotations(row_annotations, start, start),
+                                _ => None,
+                            };
+
+                            if let Some(annotation) = annotation {
+                                println!("{prefix}if row = {start} then {value}{annotation}")
+                            } else {
+                                println!("{prefix}if row = {start} then {value}")
+                            }
+                        }
+                        entries.remove(0);
+                    }
+                    println!("  else c.1.FixedUnassigned {col} row");
                 }
 
-                println!("def fixed_func_col_{col} (c: ValidCircuit P P_Prime) : ℕ → CellValue P :=");
-                println!("  λ row =>");
-                let mut body = vec![];
-                if let Some ((fill_row, fill_val)) = self.fixed_fill.get(col) {
-                    body.push(format!("if row ≥ {fill_row} then .Assigned {fill_val}"));
+                for new_entry in new_entries.into_iter().rev() {
+                    entries.insert(0, new_entry);
                 }
-                let mut lower_bound = 0;
-                for bound in boundaries {
-                    body.push(format!("if row ≤ {bound} then fixed_func_col_{col}_{lower_bound}_to_{bound} c row"));
-                    lower_bound = bound + 1;
+            }
+
+            println!("def fixed_func_col_{col} (c: ValidCircuit P P_Prime) : ℕ → ZMod P :=");
+            println!("  λ row =>");
+            let mut first = true;
+            for (value, start, end, _) in entries {
+                if first {
+                    first = false;
+                    print!("  ");
+                } else {
+                    print!("  else ");
                 }
-                println!("  {}", body.join("\n  else "));
-                println!("  else .Unassigned");
+                if let Some(end) = end {
+                    println!("if row ≥ {start} ∧ row ≤ {end} then {value}")
+                } else {
+                    println!("if row = {start} then {value}")
+                }
+            }
+            println!("  else c.1.FixedUnassigned {col} row");
+        }
+
+        println!("def fixed_func (c: ValidCircuit P P_Prime) : ℕ → ℕ → ZMod P :=");
+        println!("  λ col row => match col with");
+        for col in self.fixed.keys() {
+            if let Some((Some(annotation), _)) = self.fixed_column_annotations.get(col) {
+                println!("    | {col} => fixed_func_col_{col} c row {}", make_lean_comment(annotation));
+            } else {
+                println!("    | {col} => fixed_func_col_{col} c row");
             }
         }
-
-        println!("def fixed_func (c: ValidCircuit P P_Prime) : ℕ → ℕ → CellValue P :=");
-        if self.fixed.keys().len() == 0 {
-            println!("  λ col _ => match col with");
-        } else {
-            println!("  λ col row => match col with");
-        }
-        for col in self.fixed.keys() {
-            println!("    | {col} => fixed_func_col_{col} c row");
-        }
-        println!("    | _ => .Unassigned");
+        println!("    | _ => c.1.FixedUnassigned col row");
     }
 
-    pub fn print_grouping_props(&self, cs: &ConstraintSystem<TermField>) {
-        println!("");
-        println!("");
-        self.print_copy_constraints();
-        self.print_selectors();
-        self.print_fixed();
-        // Advice phase
-        {
-            println!("def advice_phase (c: ValidCircuit P P_Prime) : ℕ → ℕ :=");
-            println!("  λ col => match col with");
-            for (col, phase) in cs.advice_column_phase().iter().enumerate() {
+    fn print_advice_phase(&self, cs: &ConstraintSystem<TermField>) {
+        println!("def advice_phase (c: ValidCircuit P P_Prime) : ℕ → ℕ :=");
+        println!("  λ col => match col with");
+        for (col, phase) in cs.advice_column_phase().iter().enumerate() {
+            if *phase != 0 {
                 println!("  | {col} => {phase}");
             }
-            println!("  | _ => 0");
         }
+        println!("  | _ => 0");
+    }
 
-        cs
+    fn print_advice_annotations(&self) {
+        println!("  -- Advice column annotations:");
+        if self.advice_column_annotations.is_empty() {
+            println!("  -- None");
+        }
+        self.advice_column_annotations
+            .iter()
+            .for_each(|(col, (column_annotation, rows))| {
+                println!("-- Advice Column {col}");
+                if let Some(column_annotation) = column_annotation {
+                    println!("{}", make_lean_comment(column_annotation));
+                }
+                if let Some((start, _)) = rows.first_key_value() {
+                    if let Some ((end, _)) = rows.last_key_value() {
+                        if let Some(comments) = get_group_annotations(rows, *start, *end) {
+                            println!("{comments}");
+                        }
+                    }
+                }
+            });
+    }
+
+    fn print_instance_annotations(&self) {
+        println!("  -- Instance column annotations:");
+        if self.instance_column_annotations.is_empty() {
+            println!("  -- None");
+        }
+        self.instance_column_annotations
+            .iter()
+            .for_each(|(col, (column_annotation, rows))| {
+                println!("-- Instance Column {col}");
+                if let Some(column_annotation) = column_annotation {
+                    println!("{}", make_lean_comment(column_annotation));
+                }
+                if let Some((start, _)) = rows.first_key_value() {
+                    if let Some ((end, _)) = rows.last_key_value() {
+                        if let Some(comments) = get_group_annotations(rows, *start, *end) {
+                            println!("{comments}");
+                        }
+                    }
+                }
+            });
+    }
+
+    fn print_gates(&self, cs: &ConstraintSystem<TermField>) {
+        let constraints = cs
             .gates()
             .iter()
             .enumerate()
-            .for_each(|(gate_idx, gate)| {
-                gate.polynomials()
+            .flat_map(|(gate_idx, gate)| {
+                // Each gate can contain many polynomials, so we need an inner iteration
+                gate
+                    .polynomials()
                     .iter()
                     .enumerate()
-                    .for_each(|(idx, constraint)| {
-                        println!("def gate_{}_{}_{} (c: ValidCircuit P P_Prime) (row: ℕ) : Prop := ", gate_idx, idx, gate.constraint_name(idx).replace("_", "__").replace(" ", "_"));
-                        println!("  {} = Value.Real 0", expression_to_value_string(constraint, "row"))
-                    });
-            });
-        
-        println!("def all_gates (c: ValidCircuit P P_Prime): Prop := ∀ row: ℕ,");
-        let all_gates_body = if cs.gates().is_empty() {
-            "true".to_string()
-        } else {
-            cs
-                .gates()
-                .iter()
-                .enumerate()
-                .flat_map(|(gate_idx, gate)| {
-                    gate.polynomials()
-                        .iter()
-                        .enumerate()
-                        .map(move |(idx, _)| {
-                            format!("  gate_{}_{}_{} c row", gate_idx, idx, gate.constraint_name(idx).replace("_", "__").replace(" ", "_"))
-                        })
-                })
-                .join(" ∧ \n")
-        };
-        println!("  {}", all_gates_body);
+                    .filter(move |(poly_idx, polynomial)| {
+                        match polynomial {
+                            Expression::Constant(TermField::Val(0)) => {
+                                println!(
+                                    "  -- Gate number {} name: \"{}\" part {}/{} {} is trivially true",
+                                    gate_idx+1,
+                                    gate.name(),
+                                    poly_idx+1,
+                                    gate.polynomials().len(),
+                                    gate.constraint_name(*poly_idx)
+                                );
+                                false
+                            },
+                            _ => true
+                        }
+                    })
+                    .map(move |(poly_idx, polynomial)| {
+                        format!(
+                            "-- Gate number {} name: \"{}\" part {}/{} {}\n  ∀ row: ℕ, {} = 0",
+                            gate_idx+1,
+                            gate.name(),
+                            poly_idx+1,
+                            gate.polynomials().len(),
+                            gate.constraint_name(poly_idx),
+                            expression_to_value_string(polynomial, "row")
+                        )
+                    })
+            })
+            .collect_vec();
 
-        // Lookups
-        {
-            let lookups = cs.lookups();
-            let mut propnames = vec![];
-    
-            // Individual lookups
-            for lookup in lookups.iter() {
-                println!("--Lookup argument: {}", lookup.name());
-                let processed_name = format!("lookup_{}", lookup.name().replace("_", "__").replace(" ", "_"));
-                propnames.push(processed_name.clone());
+        print_grouped_props("gate_", "all_gates", &constraints, GROUPING_SIZE);
+    }
+
+    fn print_lookups(&self, cs: &ConstraintSystem<TermField>) {
+        let lookups = cs
+            .lookups()
+            .iter()
+            .enumerate()
+            .map(|(idx, lookup)| {
                 let lhs = lookup.input_expressions()
                     .iter()
                     .map(|expr| {
@@ -346,23 +370,29 @@ impl ExtractingAssignment<TermField> {
                         expression_to_value_string(expr, "lookup_row")
                     })
                     .join(", ");
-                println!("def {processed_name} (c: ValidCircuit P P_Prime) : Prop := ∀ row : ℕ, row < c.usable_rows → ∃ lookup_row : ℕ, lookup_row < c.usable_rows ∧ ({lhs}) = ({rhs})");
-            }
-    
-            // Group prop
-            {
-                let props = if propnames.is_empty() {
-                    "true".to_string()
-                } else {
-                    propnames
-                        .iter()
-                        .map(|prop_name| format!("{prop_name} c"))
-                        .join(" ∧ ")
-                };
-    
-                println!("def all_lookups (c: ValidCircuit P P_Prime): Prop := {props}");
-            }
-        }
+                format!(
+                    "∀ row : ℕ, row < c.usable_rows → ∃ lookup_row : ℕ, lookup_row < c.usable_rows ∧ -- Lookup number {} name: \"{}\"\n  ({lhs}) = ({rhs})\n  ",
+                    idx+1,
+                    lookup.name()
+                )
+            })
+            .collect_vec();
+
+        print_grouped_props("lookup_", "all_lookups", &lookups, GROUPING_SIZE);
+    }
+
+    pub fn print_grouping_props(&self, cs: &ConstraintSystem<TermField>) {
+        println!("");
+        println!("");
+        self.print_copy_constraints();
+        self.print_selectors();
+        self.print_fixed();
+        self.print_advice_phase(&cs);
+        self.print_advice_annotations();
+        self.print_instance_annotations();
+        self.print_gates(&cs);
+        self.print_lookups(&cs);
+        
 
         // Shuffles
         {
@@ -397,13 +427,13 @@ impl ExtractingAssignment<TermField> {
         }
     }
 
-    fn set_selector(&mut self, col: usize, row: usize) {
+    fn set_selector(&mut self, col: usize, row: usize, annotation: String) {
         let s = self.selectors.get_mut(&col);
         if let Some(v) = s {
-            v.insert(row);
+            v.insert(row, annotation);
         } else {
-            let mut new_set = BTreeSet::new();
-            new_set.insert(row);
+            let mut new_set = BTreeMap::new();
+            new_set.insert(row, annotation);
             self.selectors.insert(col, new_set);
         };
     }
@@ -465,9 +495,6 @@ impl ExtractingAssignment<TermField> {
 
         let mut prover = ExtractingAssignment::new();
 
-        println!("def assertions (c: ValidCircuit P P_Prime): Prop :=");
-        println!("  true");
-
         for current_phase in cs.phases() {
             prover.current_phase = current_phase;
             ConcreteCircuit::FloorPlanner::synthesize(
@@ -483,6 +510,17 @@ impl ExtractingAssignment<TermField> {
         print_postamble(namespace, &cs);
         Ok(())
 
+    }
+
+    fn assert_row_usable(&self, row: usize) {
+        let usable_rows = str::parse::<usize>(
+            &fs::read_to_string(&self.usable_rows_filename)
+                .expect("Failed to read usable_rows file")
+        ).expect("Failed to parse contents of usable_rows file");
+        if row >= usable_rows {
+            // row+1 because of 0-indexing
+            fs::write(&self.usable_rows_filename, (row+1).to_string()).expect("Failed to write usable_rows file");
+        }
     }
 }
 
@@ -505,7 +543,7 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
 
     fn enable_selector<A, AR>(
         &mut self,
-        _annotation: A,
+        annotation: A,
         selector: &Selector,
         row: usize,
     ) -> Result<(), halo2_frontend::plonk::Error>
@@ -518,9 +556,9 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
             return Ok(());
         }
 
-        println!("  ∧ {row} < c.usable_rows -- Selector {} enabled", selector.index());
+        self.assert_row_usable(row);
 
-        self.set_selector(selector.index(), row);
+        self.set_selector(selector.index(), row, annotation().into());
         Ok(())
     }
 
@@ -529,7 +567,7 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
         column: Column<Instance>,
         row: usize,
     ) -> Result<Value<TermField>, halo2_frontend::plonk::Error> {
-        println!("  ∧ {row} < c.usable_rows -- Instance {} query", column.index());
+        self.assert_row_usable(row);
 
         Ok(Value::known(TermField::from(format!(
             "instance_to_field (c.1.Instance {} {})",
@@ -540,7 +578,7 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
 
     fn assign_advice<V, VR, A, AR>(
         &mut self,
-        _annotation: A,
+        annotation: A,
         column: Column<Advice>,
         row: usize,
         _to: V,
@@ -552,8 +590,10 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
         AR: Into<String>,
     {
         if self.in_phase(FirstPhase) {
-            println!("  ∧ {row} < c.usable_rows -- Advice {} assignment", column.index());
+            self.assert_row_usable(row);
         }
+
+        update_row_annotation(&mut self.advice_column_annotations, column.index(), row, annotation().into());
 
         // Aside from the above range assertion,
         // we ignore advice assignment as we are concerned only with constraint generation
@@ -562,7 +602,7 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
 
     fn assign_fixed<V, VR, A, AR>(
         &mut self,
-        _annotation: A,
+        annotation: A,
         column: Column<Fixed>,
         row: usize,
         to: V,
@@ -577,7 +617,8 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
             return Ok(());
         }
 
-        println!("  ∧ {row} < c.usable_rows -- Fixed {} assignment", column.index());
+        update_row_annotation(&mut self.fixed_column_annotations, column.index(), row, annotation().into());
+        self.assert_row_usable(row);
 
         to().map(|v| {
             self.set_fixed_checked(
@@ -600,7 +641,8 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
             return Ok(());
         }
 
-        println!("  ∧ {left_row} < c.usable_rows ∧ {right_row} < c.usable_rows -- Copy {} to {} assignment", left_column.index(), right_column.index());
+        self.assert_row_usable(left_row);
+        self.assert_row_usable(right_row);
 
         self.copies.push(((left_column, left_row), (right_column, right_row)));
         Ok(())
@@ -616,7 +658,7 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
             return Ok(());
         }
 
-        println!(" ∧ {row} < c.usable_rows -- Fixed {} fill from row", column.index());
+        self.assert_row_usable(row);
 
         let fill_val = to.assign()?.evaluate().to_string();
         self.set_fixed_fill(column.index(), row, fill_val);
@@ -632,12 +674,16 @@ impl Assignment<TermField> for ExtractingAssignment<TermField>
 
     fn pop_namespace(&mut self, _gadget_name: Option<String>) {}
 
-    fn annotate_column<A, AR>(&mut self, _annotation: A, _column: Column<Any>)
+    fn annotate_column<A, AR>(&mut self, annotation: A, column: Column<Any>)
     where
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        println!("--Annotate column");
+        match column.column_type {
+            Any::Advice => update_column_annotation(&mut self.advice_column_annotations, column.index, annotation().into()),
+            Any::Fixed => update_column_annotation(&mut self.fixed_column_annotations, column.index, annotation().into()),
+            Any::Instance => update_column_annotation(&mut self.instance_column_annotations, column.index, annotation().into()),
+        };
     }
 
     fn get_challenge(&self, challenge: halo2_proofs::plonk::Challenge) -> Value<TermField> {
@@ -653,19 +699,6 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str], cs: &ConstraintSys
 
     println!("namespace {namespace}\n");
 
-    println!("inductive Value (P: ℕ) where");
-    println!("  | Real (x: ZMod P)");
-    println!("  | Poison");
-    
-    println!("inductive CellValue (P: ℕ) where");
-    println!("  | Assigned (x: ZMod P)");
-    println!("  | Unassigned");
-    println!("  | Poison (row: ℕ)");
-
-    println!("inductive InstanceValue (P: ℕ) where");
-    println!("  | Assigned (x: ZMod P)");
-    println!("  | Padding");
-    
     println!("def S_T_from_P (S T P : ℕ) : Prop :=");
     println!("  (2^S * T = P - 1) ∧");
     println!("  (∀ s' t': ℕ, 2^s' * t' = P - 1 → s' ≤ S)");
@@ -674,12 +707,15 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str], cs: &ConstraintSys
     println!("  mult_gen ^ P = 1");
     
     println!("structure Circuit (P: ℕ) (P_Prime: Nat.Prime P) :=");
-    println!("  Advice: ℕ → ℕ → CellValue P");
+    println!("  Advice: ℕ → ℕ → ZMod P");
+    println!("  AdviceUnassigned: ℕ → ℕ → ZMod P");
     println!("  AdvicePhase: ℕ → ℕ");
-    println!("  Fixed: ℕ → ℕ → CellValue P");
-    println!("  Instance: ℕ → ℕ → InstanceValue P");
+    println!("  Fixed: ℕ → ℕ → ZMod P");
+    println!("  FixedUnassigned: ℕ → ℕ → ZMod P");
+    println!("  Instance: ℕ → ℕ → ZMod P");
+    println!("  InstanceUnassigned: ℕ → ℕ → ZMod P");
     println!("  Selector: ℕ → ℕ → ZMod P");
-    println!("  Challenges: (ℕ → ℕ → CellValue P) → ℕ → ℕ → ZMod P");
+    println!("  Challenges: (ℕ → ℕ → ZMod P) → ℕ → ℕ → ZMod P");
     println!("  num_blinding_factors: ℕ");
     println!("  S: ℕ");
     println!("  T: ℕ");
@@ -690,70 +726,26 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str], cs: &ConstraintSys
     }
     
     println!("variable {{P: ℕ}} {{P_Prime: Nat.Prime P}}");
-    println!("def eval_cell (cell : CellValue P) : Value P :=");
-    println!("  match cell with");
-    println!("  | .Assigned (x : ZMod P) => .Real x");
-    println!("  | .Unassigned            => .Real 0");
-    println!("  | .Poison (_ : ℕ)      => .Poison");
-    println!("");
-    println!("def instance_to_field (cell : InstanceValue P) : ZMod P :=");
-    println!("  match cell with");
-    println!("  | .Assigned x => x");
-    println!("  | .Padding    => 0");
-    println!("");
-    println!("def eval_instance (inst : InstanceValue P) : Value P :=");
-    println!("  .Real (instance_to_field inst)");
-    println!("");
-    println!("def cell_of_inst (inst : InstanceValue P) : CellValue P :=");
-    println!("  .Assigned (instance_to_field inst)");
-    println!("");
-    println!("instance {{P : ℕ}} : Coe (InstanceValue P) (CellValue P) where");
-    println!("  coe := cell_of_inst");
-    println!("");
-    println!("instance : Neg (Value P) := ⟨λ x ↦");
-    println!("  match x with");
-    println!("  | .Real x => .Real (-x)");
-    println!("  | .Poison => .Poison");
-    println!("⟩");
-    println!("");
-    println!("instance : Add (Value P) := ⟨λ x y ↦");
-    println!("  match x, y with");
-    println!("  | .Real x₁, .Real x₂ => .Real (x₁ + x₂)");
-    println!("  | .Poison, .Poison   => .Poison");
-    println!("  | .Poison, .Real _   => .Poison");
-    println!("  | .Real _, .Poison   => .Poison");
-    println!("⟩");
-    println!("");
-    println!("-- Should this handle (x - x)?");
-    println!("instance : Sub (Value P) := ⟨λ x y ↦ x + (-y)⟩");
-    println!("");
-    println!("instance : Mul (Value P) := ⟨λ x y ↦");
-    println!("  match x, y with");
-    println!("  | .Real x₁, .Real x₂ => .Real (x₁ * x₂)");
-    println!("  | .Poison, .Poison   => .Poison");
-    println!("  | .Poison, .Real x₁  => if x₁ = 0 then .Real 0 else .Poison");
-    println!("  | .Real x₁, .Poison  => if x₁ = 0 then .Real 0 else .Poison");
-    println!("⟩");
     println!("def Circuit.isValid (c: Circuit P P_Prime) : Prop :=");
     println!("  S_T_from_P c.S c.T P ∧");
     println!("  multiplicative_generator P c.mult_gen ∧ (");
-    println!("  ∀ advice1 advice2: ℕ → ℕ → CellValue P, ∀ phase: ℕ,");
+    println!("  ∀ advice1 advice2: ℕ → ℕ → ZMod P, ∀ phase: ℕ,");
     println!("    (∀ row col, (col < {} ∧ c.AdvicePhase col ≤ phase) → advice1 col row = advice2 col row) →", cs.num_advice_columns());
     println!("    (∀ i, c.Challenges advice1 i phase = c.Challenges advice2 i phase)");
     println!("  )");
 
     println!("abbrev ValidCircuit (P: ℕ) (P_Prime: Nat.Prime P) : Type := {{c: Circuit P P_Prime // c.isValid}}");
     println!("namespace ValidCircuit");
-    println!("def get_advice (c: ValidCircuit P P_Prime) : ℕ → ℕ → Value P :=");
-    println!("  λ col row => eval_cell (c.1.Advice col row)");
-    println!("def get_fixed (c: ValidCircuit P P_Prime) : ℕ → ℕ → Value P :=");
-    println!("  λ col row => eval_cell (c.1.Fixed col row)");
-    println!("def get_instance (c: ValidCircuit P P_Prime) : ℕ → ℕ → Value P :=");
-    println!("  λ col row => eval_instance (c.1.Instance col row)");
-    println!("def get_selector (c: ValidCircuit P P_Prime) : ℕ → ℕ → Value P :=");
-    println!("  λ col row => .Real (c.1.Selector col row)");
-    println!("def get_challenge (c: ValidCircuit P P_Prime) : ℕ → ℕ → Value P :=");
-    println!("  λ idx phase => .Real (c.1.Challenges c.1.Advice idx phase)");
+    println!("def get_advice (c: ValidCircuit P P_Prime) : ℕ → ℕ → ZMod P :=");
+    println!("  λ col row => c.1.Advice col row");
+    println!("def get_fixed (c: ValidCircuit P P_Prime) : ℕ → ℕ → ZMod P :=");
+    println!("  λ col row => c.1.Fixed col row");
+    println!("def get_instance (c: ValidCircuit P P_Prime) : ℕ → ℕ → ZMod P :=");
+    println!("  λ col row => c.1.Instance col row");
+    println!("def get_selector (c: ValidCircuit P P_Prime) : ℕ → ℕ → ZMod P :=");
+    println!("  λ col row => c.1.Selector col row");
+    println!("def get_challenge (c: ValidCircuit P P_Prime) : ℕ → ℕ → ZMod P :=");
+    println!("  λ idx phase => c.1.Challenges c.1.Advice idx phase");
     println!("def k (c: ValidCircuit P P_Prime) := c.1.k");
     println!("def n (c: ValidCircuit P P_Prime) := 2^c.k");
     println!("def usable_rows (c: ValidCircuit P P_Prime) := c.n - (c.1.num_blinding_factors + 1)");
@@ -777,18 +769,20 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str], cs: &ConstraintSys
 }
 
 pub fn print_postamble(name: &str, cs: &ConstraintSystem<TermField>) {
+    let usable_rows = str::parse::<usize>(&fs::read_to_string("./usable_rows").expect("Failed to read usable_rows")).expect("Failed to parse usable_rows");
+
     println!("def meets_constraints (c: ValidCircuit P P_Prime): Prop :=");
     println!("  sufficient_rows c ∧");
     println!("  c.1.num_blinding_factors = {} ∧", cs.blinding_factors());
     println!("  c.1.Selector = selector_func c ∧");
     println!("  c.1.Fixed = fixed_func c ∧");
     println!("  c.1.AdvicePhase = advice_phase c ∧");
-    println!("  assertions c  ∧");
+    println!("  c.usable_rows ≥ {usable_rows} ∧");
     println!("  all_gates c ∧");
     println!("  all_copy_constraints c ∧");
     println!("  all_lookups c ∧");
     println!("  all_shuffles c ∧");
-    println!("  ∀ col row: ℕ, (row < c.n ∧ row ≥ c.usable_rows) → c.1.Instance col row = .Padding");
+    println!("  ∀ col row: ℕ, (row < c.n ∧ row ≥ c.usable_rows) → c.1.Instance col row = c.1.InstanceUnassigned col row");
     println!("end {name}");
 }
 
@@ -804,18 +798,18 @@ pub fn expression_to_value_string(expr: &Expression<TermField>, row_name: &str) 
     };
 
     match expr {
-        Expression::Constant(value) => format!("(.Real {})", value),
+        Expression::Constant(value) => format!("({})", value),
         Expression::Selector(selector) => format!("c.get_selector {} {row_name}", selector.0),
         Expression::Fixed(query) => format_lookup("c.get_fixed", query.column_index(), query.rotation().0),
         Expression::Advice(query) => format_lookup("c.get_advice", query.column_index(), query.rotation().0),
         Expression::Instance(query) => format_lookup("c.get_instance", query.column_index(), query.rotation().0),
-        Expression::Challenge(challenge) => format!("c.get_challenge {}", challenge.index()),
+        Expression::Challenge(challenge) => format!("c.get_challenge {} {}", challenge.index(), challenge.phase()),
         Expression::Negated(expression) => format!("-({})", expression_to_value_string(expression, row_name)),
         Expression::Sum(expression, expression1) =>
             format!("({}) + ({})", expression_to_value_string(expression, row_name), expression_to_value_string(expression1, row_name)),
         Expression::Product(expression, expression1) =>
             format!("({}) * ({})", expression_to_value_string(expression, row_name), expression_to_value_string(expression1, row_name)),
         Expression::Scaled(expression, factor) =>
-        format!("(.Real {}) * ({})", factor.to_string(), expression_to_value_string(expression, row_name)),
+        format!("({}) * ({})", factor.to_string(), expression_to_value_string(expression, row_name)),
     }
 }

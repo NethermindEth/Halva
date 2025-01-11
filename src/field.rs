@@ -13,9 +13,8 @@ const EXPRESSION_MAX_SIZE: usize = 16384;
 // This means we have to use a stack allocated, dynamically generatable, fixed length string
 #[derive(Clone, Copy)]
 pub enum TermField {
-    Zero,
-    One,
-    Expr(ArrayString<EXPRESSION_MAX_SIZE>),
+    Val(i64),
+    Expr(*const String),
     TwoInv,
     MultiplicativeGenerator,
     S,
@@ -27,40 +26,71 @@ pub enum TermField {
 impl PartialEq for TermField {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            
-            (Self::Expr(l0), Self::Expr(r0)) => if l0 == r0 {
+            (Self::Val(x), Self::Val(y)) => if x == y {
                 true
-            } else {
+            } else { // Two identical values are equal, but distinct values could still be equal because the field modulus is symbolic
                 #[cfg(not(feature = "unsafe-equality"))]
-                panic!("Unable to determine whether {} and {} are equal without the unsafe-equality feature (which will consider them not equal)", l0, r0);
+                panic!("Unable to determine whether {} and {} are equal without the unsafe-equality feature (which will consider them not equal)", x, y);
 
                 #[cfg(feature = "unsafe-equality")]
                 false
+            }
+            (Self::Expr(l0), Self::Expr(r0)) => {
+                unsafe {
+                    if l0 == r0 {
+                        true
+                    } else {
+                        #[cfg(not(feature = "unsafe-equality"))]
+                        panic!("Unable to determine whether {} and {} are equal without the unsafe-equality feature (which will consider them not equal)", **l0, **r0);
+        
+                        #[cfg(feature = "unsafe-equality")]
+                        false
+                    }
+                }
             },
-            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+            _ => if core::mem::discriminant(self) == core::mem::discriminant(other) {
+                true
+            } else {
+                #[cfg(not(feature = "unsafe-equality"))]
+                panic!("Unable to determine whether {} and {} are equal without the unsafe-equality feature (which will consider them not equal)", self.to_expr(), other.to_expr());
+        
+                #[cfg(feature = "unsafe-equality")]
+                false
+            }
         }
     }
 }
 
 impl Eq for TermField {}
 
-// TODO fix hack
-//   implementation of decompose-running-sum expects a number starting with 0x
-//   the default implementation of Debug for TermField therefore causes a crash when it cannot remove the 0x prefix
-//   to get around this, a meaningless 0x prefix is added. The output is NOT in hexadecimal
 impl Debug for TermField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{}", self.to_expr())
+        match &self {
+            TermField::Val(_) => write!(f, "Val: {}", self.to_expr()),
+            TermField::Expr(_) => write!(f, "Expr: {}", self.to_expr()),
+            TermField::TwoInv => write!(f, "TwoInv: {}", self.to_expr()),
+            TermField::MultiplicativeGenerator => write!(f, "MGen: {}", self.to_expr()),
+            TermField::S => write!(f, "S: {}", self.to_expr()),
+            TermField::RootOfUnity => write!(f, "RootOfUnity: {}", self.to_expr()),
+            TermField::RootOfUnityInv => write!(f, "RootOfUnityInv: {}", self.to_expr()),
+            TermField::Delta => write!(f, "Delta: {}", self.to_expr()),
+        }
+    }
+}
+
+impl Display for TermField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_expr())
     }
 }
 
 impl TermField {
     pub const fn zero() -> Self {
-        TermField::Zero
+        TermField::Val(0)
     }
 
     pub const fn one() -> Self {
-        TermField::One
+        TermField::Val(1)
     }
 
     pub const fn two_inv() -> Self {
@@ -72,19 +102,21 @@ impl TermField {
         TermField::from(format!("c.1.sym_{name}"))
     }
 
-    fn to_expr(&self) -> ArrayString<EXPRESSION_MAX_SIZE> {
-        ArrayString::from(match self {
-            TermField::Zero => "0",
-            TermField::One => "1",
-            TermField::Expr(x) => x,
-            TermField::TwoInv => "(2: ZMod P).inv",
-            TermField::MultiplicativeGenerator => "c.mult_gen",
-            TermField::S => "c.S",
-            TermField::RootOfUnity => "c.root_of_unity",
-            TermField::RootOfUnityInv => "c.root_of_unity.inv",
-            TermField::Delta => "c.delta",
-        })
-        .unwrap()
+    fn to_expr(&self) -> String {
+        match self {
+            TermField::Val(x) => x.to_string(),
+            TermField::Expr(x) => {
+                unsafe {
+                    (**x).clone()
+                }
+            }
+            TermField::TwoInv => String::from("(2: ZMod P).inv"),
+            TermField::MultiplicativeGenerator => String::from("c.mult_gen"),
+            TermField::S => String::from("c.S"),
+            TermField::RootOfUnity => String::from("c.root_of_unity"),
+            TermField::RootOfUnityInv => String::from("c.root_of_unity.inv"),
+            TermField::Delta => String::from("c.delta"),
+        }
     }
 
     pub fn create_s() -> Self {
@@ -94,17 +126,13 @@ impl TermField {
 
 impl From<&str> for TermField {
     fn from(s: &str) -> Self {
-        match s.trim() {
-            "0" => Self::Zero,
-            "1" => Self::One,
-            s => {
-                let array_str = ArrayString::from(s);
-                if let Ok(str) = array_str {
-                    Self::Expr(str)
-                } else {
-                    panic!("{}", s)
-                }
-            }
+        let num = str::parse::<i64>(s);
+        if let Ok(val) = num {
+            Self::Val(val)
+        } else {
+            let heap_str = Box::new(String::from(s));
+            let ptr = Box::into_raw(heap_str).cast_const();
+            Self::Expr(ptr)
         }
     }
 }
@@ -118,12 +146,6 @@ impl From<String> for TermField {
 impl From<&String> for TermField {
     fn from(value: &String) -> Self {
         Self::from(value.as_str())
-    }
-}
-
-impl Display for TermField {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_expr())
     }
 }
 
@@ -161,7 +183,8 @@ impl Neg for TermField {
 
     fn neg(self) -> Self::Output {
         match self {
-            Self::Zero => Self::Zero,
+            // TODO checks
+            Self::Val(x) => Self::Val(-x),
             _ => Self::from(&format!("-({})", self.to_expr())),
         }
     }
@@ -172,8 +195,18 @@ impl Add for TermField {
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::Zero, _) => rhs,
-            (_, Self::Zero) => self,
+            (Self::Val(x), Self::Val(y)) => {
+                let big_x = x as i128;
+                let big_y = y as i128;
+                let big_res = big_x + big_y;
+                if let Ok(res) = TryInto::<i64>::try_into(big_res) {
+                    Self::Val(res)
+                } else {
+                    Self::from(format!("{}", big_res))
+                }
+            },
+            (Self::Val(0), _) => rhs,
+            (_, Self::Val(0)) => self,
             _ => Self::from(&format!("({}) + ({})", self.to_expr(), rhs.to_expr())),
         }
     }
@@ -184,8 +217,9 @@ impl Sub for TermField {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::Zero, _) => rhs.neg(),
-            (_, Self::Zero) => self,
+            (Self::Val(x), Self::Val(y)) => Self::Val(x-y),
+            (Self::Val(0), _) => rhs.neg(),
+            (_, Self::Val(0)) => self,
             _ => Self::from(&format!("({}) - ({})", self.to_expr(), rhs.to_expr())),
         }
     }
@@ -196,8 +230,18 @@ impl Mul for TermField {
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::One, _) => rhs,
-            (_, Self::One) => self,
+            (Self::Val(x), Self::Val(y)) => {
+                let big_x = x as i128;
+                let big_y = y as i128;
+                let big_res = big_x * big_y;
+                if let Ok(res) = TryInto::<i64>::try_into(big_res) {
+                    Self::Val(res)
+                } else {
+                    Self::from(format!("{}", big_res))
+                }
+            },
+            (Self::Val(1), _) => rhs,
+            (_, Self::Val(1)) => self,
             _ => Self::from(&format!("({}) * ({})", self.to_expr(), rhs.to_expr())),
         }
     }
@@ -339,6 +383,16 @@ impl Field for TermField {
     }
 }
 
+impl From<bool> for TermField {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::one()
+        } else {
+            Self::zero()
+        }
+    }
+}
+
 impl From<u64> for TermField {
     fn from(value: u64) -> Self {
         match value {
@@ -373,23 +427,25 @@ impl AsRef<[u8]> for TermFieldBytes {
 impl PrimeField for TermField {
     type Repr = TermFieldBytes;
 
-    fn from_repr(repr: Self::Repr) -> CtOption<Self> {
-        #[cfg(all(feature = "repr-text", feature = "repr-number"))]
+    #[cfg(all(feature = "repr-text", feature = "repr-number"))]
+    fn from_repr(_repr: Self::Repr) -> CtOption<Self> {
         compile_error!("features `halo2-extractor/repr-text` and `halo2-extractor/repr-number` are mutually exclusive");
+    }
 
-        #[cfg(not(any(feature = "repr-text", feature = "repr-number")))]
+    #[cfg(not(any(feature = "repr-text", feature = "repr-number")))]
+    fn from_repr(_repr: Self::Repr) -> CtOption<Self> {        
         panic!("from_repr requires either the repr-text flag or the repr-number feature to be enabled");
+    }
 
-        #[cfg(feature = "repr-number")]
-        {
-            let x = BigUint::from_bytes_le(&repr.0.as_bytes());
-            CtOption::new(Self::from(x.to_str_radix(10)), Choice::from(1))
-        }
+    #[cfg(all(feature = "repr-number", not(feature = "repr-text")))]
+    fn from_repr(repr: Self::Repr) -> CtOption<Self> {
+        let x = BigUint::from_bytes_le(&repr.0.as_bytes());
+        CtOption::new(Self::from(x.to_str_radix(10)), Choice::from(1))
+    }
 
-        #[cfg(feature = "repr-text")]
-        {
-            CtOption::new(Self::Expr(repr.0), Choice::from(1))
-        }
+    #[cfg(all(feature = "repr-text", not(feature = "repr-number")))]
+    fn from_repr(repr: Self::Repr) -> CtOption<Self> {
+        CtOption::new(Self::Expr(repr.0), Choice::from(1))
     }
 
     fn to_repr(&self) -> Self::Repr {

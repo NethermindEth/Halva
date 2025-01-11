@@ -214,7 +214,7 @@ fn main() {
         lookup_value: Value::known(TermField::create_symbol("lookup_value").into()),
     };
 
-    ExtractingAssignment::run(&circuit, "LookupExamples.Table", &["value", "lookup_value"]);
+    ExtractingAssignment::run(&circuit, "LookupExamples.Table", &["value", "lookup_value"]).unwrap();
 }
 
 #[cfg(test)]

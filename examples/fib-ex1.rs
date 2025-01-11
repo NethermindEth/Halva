@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use ff::PrimeField;
-use halo2_extr::{extraction::{print_postamble, print_preamble, ExtractingAssignment}, field::TermField};
+use halo2_extr::{extraction::ExtractingAssignment, field::TermField};
 use halo2_frontend::{circuit::*, plonk::*};
 use halo2_proofs::poly::Rotation;
 
@@ -221,5 +221,5 @@ mod tests {
 
 fn main() {
     let circuit = MyCircuit::<TermField>(PhantomData);
-    ExtractingAssignment::run(&circuit, "Fibonacci.Ex1", &[]);
+    ExtractingAssignment::run(&circuit, "Fibonacci.Ex1", &[]).unwrap();
 }

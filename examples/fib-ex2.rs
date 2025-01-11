@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
 
 use ff::PrimeField;
-use halo2_extr::{extraction::{print_postamble, print_preamble, ExtractingAssignment}, field::TermField};
-use halo2_frontend::{circuit::*, dev::CircuitGates, plonk::*};
+use halo2_extr::{extraction::ExtractingAssignment, field::TermField};
+use halo2_frontend::{circuit::*, plonk::*};
 use halo2_proofs::{circuit::AssignedCell, plonk::Advice, poly::Rotation};
-use halo2curves::pasta::Fq;
 
 // https://github.com/icemelon/halo2-examples/blob/master/src/fibonacci/example2.rs
 

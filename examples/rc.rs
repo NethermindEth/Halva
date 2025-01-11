@@ -235,7 +235,7 @@ fn main() {
         large_value: Value::known(TermField::from(2 as u64).into()),
     };
 
-    ExtractingAssignment::run(&circuit, "RC", &[]);
+    ExtractingAssignment::run(&circuit, "RC", &[]).unwrap();
 }
 
 // // Now let's test it! Here we define a circuit with a single value. and in syntesize function we assign that value

@@ -4,7 +4,7 @@ use ff::PrimeField;
 use halo2_extr::{field::TermField, extraction::ExtractingAssignment};
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Value, SimpleFloorPlanner},
-    plonk::{Advice, Column, ConstraintSystem, Constraints, Expression, Selector, Circuit, ErrorFront, FloorPlanner},
+    plonk::{Advice, Column, ConstraintSystem, Constraints, Expression, Selector, Circuit, ErrorFront},
     poly::Rotation,
 };
 
@@ -116,7 +116,7 @@ fn main() {
     const RANGE: usize = 10;
     let circuit = MyCircuit::<TermField, RANGE> {value: Value::known(TermField::from(5).into())};
 
-    ExtractingAssignment::run(&circuit, "RangeCheck", &[]);
+    ExtractingAssignment::run(&circuit, "RangeCheck", &[]).unwrap();
 }
 
 //     #[test]
