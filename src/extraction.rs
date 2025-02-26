@@ -697,6 +697,8 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str], cs: &ConstraintSys
     println!("import Mathlib.Data.ZMod.Defs");
     println!("import Mathlib.Data.ZMod.Basic\n");
 
+    println!("set_option linter.unusedVariables false\n");
+
     println!("namespace {namespace}\n");
 
     println!("def S_T_from_P (S T P : ℕ) : Prop :=");

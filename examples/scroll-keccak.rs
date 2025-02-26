@@ -6,5 +6,5 @@ fn main() {
     let num_rows = 2_usize.pow(10);
     println!("-- {:?}", KeccakCircuit::capacity_for_row(num_rows));
     let circuit = KeccakCircuit::new(num_rows, vec![vec![0,0]]);
-    ExtractingAssignment::run(&circuit, "Scroll.Keccak", &[]).unwrap();
+    ExtractingAssignment::run(&circuit, "Keccak", &[]).unwrap();
 }
