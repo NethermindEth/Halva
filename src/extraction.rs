@@ -238,6 +238,14 @@ impl ExtractingAssignment<TermField> {
                     println!("if row = {start} then {value}")
                 }
             }
+            if let Some ((fill_row, fill_value)) = self.fixed_fill.get(&col) {
+                if first {
+                    print!("  ");
+                } else {
+                    print!("  else ");
+                }
+                println!("if row ≥ {fill_row} ∧ row < c.usable_rows then {fill_value}")
+            }
             println!("  else c.1.FixedUnassigned {col} row");
         }
 
