@@ -716,7 +716,7 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str], cs: &ConstraintSys
     println!("def multiplicative_generator (P: ℕ) (mult_gen: ZMod P) : Prop :=");
     println!("  mult_gen ^ P = 1");
     
-    println!("structure Circuit (P: ℕ) (P_Prime: Nat.Prime P) :=");
+    println!("structure Circuit (P: ℕ) (P_Prime: Nat.Prime P) where");
     println!("  Advice: ℕ → ℕ → ZMod P");
     println!("  AdviceUnassigned: ℕ → ℕ → ZMod P");
     println!("  AdvicePhase: ℕ → ℕ");
