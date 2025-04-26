@@ -183,8 +183,8 @@ impl Neg for TermField {
 
     fn neg(self) -> Self::Output {
         match self {
-            // TODO checks
-            Self::Val(x) => Self::Val(-x),
+            // i64's lower bound is -2^63, but its upper bound is 2^63-1
+            Self::Val(x) if x > 0x8000000000000000u64 as i64 => Self::Val(-x),
             _ => Self::from(&format!("-({})", self.to_expr())),
         }
     }
@@ -217,7 +217,16 @@ impl Sub for TermField {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::Val(x), Self::Val(y)) => Self::Val(x-y),
+            (Self::Val(x), Self::Val(y)) => {
+                let big_x = x as i128;
+                let big_y = y as i128;
+                let big_res = big_x - big_y;
+                if let Ok(res) = TryInto::<i64>::try_into(big_res) {
+                    Self::Val(res)
+                } else {
+                    Self::from(format!("{}", big_res))
+                }
+            },
             (Self::Val(0), _) => rhs.neg(),
             (_, Self::Val(0)) => self,
             _ => Self::from(&format!("({}) - ({})", self.to_expr(), rhs.to_expr())),
