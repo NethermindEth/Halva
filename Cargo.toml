@@ -34,21 +34,3 @@ array-init = "2.1.0"
 log = "0.4.22"
 rayon = "1.10.0"
 
-[[example]]
-name = "fibo-table"
-
-[[example]]
-name = "lookup"
-
-[[example]]
-name = "layout"
-
-[[example]]
-name = "table"
-
-[[example]]
-name = "scroll-exp"
-path = "examples/scroll/exp.rs"
-
-# [[example]]
-# name = "cond-swap"
