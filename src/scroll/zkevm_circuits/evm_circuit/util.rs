@@ -642,16 +642,19 @@ pub(crate) mod constraint_builder;
 pub(crate) mod rlc {
     use std::ops::{Add, Mul};
 
-    use crate::{field::TermField, scroll::zkevm_circuits::util::/*{*/Expr}/*, Field}*/;
-    use halo2_proofs::plonk::Expression;
+    // use halo2_proofs::plonk::Expression;
 
-    pub(crate) fn expr<E: Expr>(expressions: &[E], randomness: E) -> Expression<TermField> {
-        if !expressions.is_empty() {
-            generic(expressions.iter().map(|e| e.expr()), randomness.expr())
-        } else {
-            0.expr()
-        }
-    }
+    use crate::field::TermField;
+    // use crate::scroll::gadgets::util::Expr;
+    // use halo2_proofs::plonk::Expression;
+
+    // pub(crate) fn expr<E: Expr>(expressions: &[E], randomness: E) -> Expression<TermField> {
+    //     if !expressions.is_empty() {
+    //         generic(expressions.iter().map(|e| e.expr()), randomness.expr())
+    //     } else {
+    //         0.expr()
+    //     }
+    // }
 
     pub(crate) fn value<'a, I>(values: I, randomness: TermField) -> TermField
     where

@@ -5,7 +5,7 @@ use super::param::*;
 // use crate::util::Field;
 // use eth_types::Word;
 // use gadgets::ToScalar;
-use halo2_proofs::circuit::Value;
+// use halo2_proofs::circuit::Value;
 use std::env::var;
 
 /// Description of which bits (positions) a part contains
@@ -242,14 +242,14 @@ pub(crate) fn get_num_bits_per_lookup_impl(range: usize, log_height: usize) -> u
 
 use crate::field::TermField;
 
-pub(crate) fn extract_field(value: Value<TermField>) -> TermField {
-    let mut field = TermField::zero();
-    let _ = value.map(|f| {
-        field = f;
-        f
-    });
-    field
-}
+// pub(crate) fn extract_field(value: Value<TermField>) -> TermField {
+//     let mut field = TermField::zero();
+//     let _ = value.map(|f| {
+//         field = f;
+//         f
+//     });
+//     field
+// }
 
 /// Encodes the data using rlc
 pub(crate) mod compose_rlc {
@@ -282,23 +282,23 @@ pub(crate) mod scatter {
 
 /// Packs bits into bytes
 pub(crate) mod to_bytes {
-    use crate::{field::TermField, scroll::gadgets::util::Expr};
-    use halo2_proofs::plonk::Expression;
+    // use crate::{field::TermField, scroll::gadgets::util::Expr};
+    // use halo2_proofs::plonk::Expression;
 
-    pub(crate) fn expr(bits: &[Expression<TermField>]) -> Vec<Expression<TermField>> {
-        debug_assert!(bits.len() % 8 == 0, "bits not a multiple of 8");
-        let mut bytes = Vec::new();
-        for byte_bits in bits.chunks(8) {
-            let mut value = 0.expr();
-            let mut multiplier = TermField::one();
-            for byte in byte_bits.iter() {
-                value = value + byte.expr() * multiplier;
-                multiplier *= TermField::from(2);
-            }
-            bytes.push(value);
-        }
-        bytes
-    }
+    // pub(crate) fn expr(bits: &[Expression<TermField>]) -> Vec<Expression<TermField>> {
+    //     debug_assert!(bits.len() % 8 == 0, "bits not a multiple of 8");
+    //     let mut bytes = Vec::new();
+    //     for byte_bits in bits.chunks(8) {
+    //         let mut value = 0.expr();
+    //         let mut multiplier = TermField::one();
+    //         for byte in byte_bits.iter() {
+    //             value = value + byte.expr() * multiplier;
+    //             multiplier *= TermField::from(2);
+    //         }
+    //         bytes.push(value);
+    //     }
+    //     bytes
+    // }
 
     pub(crate) fn value(bits: &[u8]) -> Vec<u8> {
         debug_assert!(bits.len() % 8 == 0, "bits not a multiple of 8");

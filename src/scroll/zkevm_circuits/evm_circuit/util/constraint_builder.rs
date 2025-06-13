@@ -19,24 +19,24 @@ pub trait ConstrainBuilderCommon {
         self.add_constraint(name, value.clone() * (1.expr() - value));
     }
 
-    fn require_in_set(
-        &mut self,
-        name: &'static str,
-        value: Expression<TermField>,
-        set: Vec<Expression<TermField>>,
-    ) {
-        self.add_constraint(
-            name,
-            set.iter()
-                .fold(1.expr(), |acc, item| acc * (value.clone() - item.clone())),
-        );
-    }
+    // fn require_in_set(
+    //     &mut self,
+    //     name: &'static str,
+    //     value: Expression<TermField>,
+    //     set: Vec<Expression<TermField>>,
+    // ) {
+    //     self.add_constraint(
+    //         name,
+    //         set.iter()
+    //             .fold(1.expr(), |acc, item| acc * (value.clone() - item.clone())),
+    //     );
+    // }
 
-    fn add_constraints(&mut self, constraints: Vec<(&'static str, Expression<TermField>)>) {
-        for (name, constraint) in constraints {
-            self.add_constraint(name, constraint);
-        }
-    }
+    // fn add_constraints(&mut self, constraints: Vec<(&'static str, Expression<TermField>)>) {
+    //     for (name, constraint) in constraints {
+    //         self.add_constraint(name, constraint);
+    //     }
+    // }
 }
 
 #[derive(Default)]

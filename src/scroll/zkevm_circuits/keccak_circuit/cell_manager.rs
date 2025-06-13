@@ -1,12 +1,13 @@
 use halo2_proofs::{
-    circuit::Value,
+    // circuit::Value,
     plonk::{Advice, Column, ConstraintSystem, Expression, VirtualCells},
     poly::Rotation,
 };
 
 use crate::{field::TermField, scroll::gadgets::util::Expr};
 
-use super::{extract_field, keccak_packed_multi::KeccakRegion};
+// use super::extract_field;
+use super::keccak_packed_multi::KeccakRegion;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Cell {
@@ -68,20 +69,20 @@ impl Cell {
         region.assign(self.column_idx, (offset + self.rotation) as usize, value);
     }
 
-    pub(crate) fn assign_value(
-        &self,
-        region: &mut KeccakRegion,
-        offset: i32,
-        value: Value<TermField>,
-    ) {
-        // This is really ugly. But since there's no way to easily adapt the CellManager
-        // API customized for this impl specifically, for now I'm opening the
-        // value and extracting it. Once https://github.com/privacy-scaling-explorations/zkevm-circuits/issues/933 is resolved,
-        // this shouldn't be needed.
-        let value_f = extract_field(value);
+    // pub(crate) fn assign_value(
+    //     &self,
+    //     region: &mut KeccakRegion,
+    //     offset: i32,
+    //     value: Value<TermField>,
+    // ) {
+    //     // This is really ugly. But since there's no way to easily adapt the CellManager
+    //     // API customized for this impl specifically, for now I'm opening the
+    //     // value and extracting it. Once https://github.com/privacy-scaling-explorations/zkevm-circuits/issues/933 is resolved,
+    //     // this shouldn't be needed.
+    //     let value_f = extract_field(value);
 
-        region.assign(self.column_idx, (offset + self.rotation) as usize, value_f);
-    }
+    //     region.assign(self.column_idx, (offset + self.rotation) as usize, value_f);
+    // }
 }
 
 impl Expr for Cell {
@@ -106,6 +107,7 @@ pub struct CellColumn {
 /// CellManager
 #[derive(Clone, Debug)]
 pub struct CellManager {
+    #[allow(dead_code)]
     height: usize,
     columns: Vec<CellColumn>,
     rows: Vec<usize>,

@@ -16,7 +16,7 @@ use log::/*{*/debug/*, trace}*/;
 use rayon::{iter::IntoParallelRefIterator, prelude::ParallelIterator};
 use std::/*{*/env::var/*, vec}*/;
 
-const MAX_DEGREE: usize = 9;
+// const MAX_DEGREE: usize = 9;
 
 /// Obtain the rows required for 1 iteration of f-box's inner round
 /// function (consisting of 5 phases) within Keccak circuit
@@ -191,7 +191,7 @@ pub(crate) mod split {
             evm_circuit::util::constraint_builder::{
                 BaseConstraintBuilder, ConstrainBuilderCommon,
             },
-            keccak_circuit::{keccak_packed_multi::PartValue, pack, pack_part, unpack, util::WordParts}, /*}*/
+            keccak_circuit::{keccak_packed_multi::PartValue, /*pack,*/ pack_part, unpack, util::WordParts}, /*}*/
             util::Expr,
         },
     };
@@ -256,7 +256,7 @@ pub(crate) mod split_uniform {
         evm_circuit::util::constraint_builder::{BaseConstraintBuilder, ConstrainBuilderCommon},
         keccak_circuit::{
             param::BIT_COUNT,
-            util::{pack, pack_part, rotate, rotate_rev, unpack, WordParts},
+            util::{/*pack,*/ pack_part, rotate, rotate_rev, unpack, WordParts},
         },
         util::Expr,
     };
@@ -414,7 +414,7 @@ pub(crate) mod split_uniform {
                 unreachable!();
             }
         }
-        let input_parts = rotate_rev(input_parts, rot, target_part_size);
+        // let input_parts = rotate_rev(input_parts, rot, target_part_size);
         // debug_assert_eq!(decode::value(input_parts), input);
         output_parts
     }
