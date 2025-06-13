@@ -4,6 +4,7 @@ use std::{
 
 use arrayvec::ArrayString;
 use ff::{Field, FromUniformBytes, PrimeField};
+use halo2_proofs::plonk::Challenge;
 use num_bigint::BigUint;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
@@ -20,7 +21,9 @@ pub enum TermField {
     S,
     RootOfUnity,
     RootOfUnityInv,
-    Delta
+    Delta,
+    Challenge(Challenge),
+    Instance{column: usize, row: usize}
 }
 
 impl PartialEq for TermField {
@@ -74,6 +77,8 @@ impl Debug for TermField {
             TermField::RootOfUnity => write!(f, "RootOfUnity: {}", self.to_expr()),
             TermField::RootOfUnityInv => write!(f, "RootOfUnityInv: {}", self.to_expr()),
             TermField::Delta => write!(f, "Delta: {}", self.to_expr()),
+            TermField::Challenge(_) => write!(f, "Challenge: {}", self.to_expr()),
+            TermField::Instance{column: _, row: _} => write!(f, "Instance: {}", self.to_expr()),
         }
     }
 }
@@ -106,21 +111,31 @@ impl TermField {
         match self {
             TermField::Val(x) => x.to_string(),
             TermField::Expr(x) => {
-                unsafe {
-                    (**x).clone()
-                }
-            }
+                        unsafe {
+                            (**x).clone()
+                        }
+                    }
             TermField::TwoInv => String::from("(2: ZMod P).inv"),
             TermField::MultiplicativeGenerator => String::from("c.mult_gen"),
             TermField::S => String::from("c.S"),
             TermField::RootOfUnity => String::from("c.root_of_unity"),
             TermField::RootOfUnityInv => String::from("c.root_of_unity.inv"),
             TermField::Delta => String::from("c.delta"),
+            TermField::Challenge(challenge) => format!("c.get_challenge {} {}", challenge.index(), challenge.phase()),
+            TermField::Instance { column, row } => format!("c.get_instance {column} {row}"),
         }
     }
 
     pub fn create_s() -> Self {
         Self::from("S")
+    }
+
+    pub fn create_challenge(challenge: Challenge) -> Self {
+        TermField::Challenge(challenge)
+    }
+
+    pub fn create_instance(column: usize, row: usize) -> Self {
+        TermField::Instance{column, row}
     }
 }
 
