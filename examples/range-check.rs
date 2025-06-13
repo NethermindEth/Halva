@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use ff::PrimeField;
-use halo2_extr::{field::TermField, extraction::ExtractingAssignment};
+use halo2_extr::{delegating_prover::DelegatingProver, field::TermField, lean_delegating_prover::LeanDelegatingProver};
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Value, SimpleFloorPlanner},
     plonk::{Advice, Column, ConstraintSystem, Constraints, Expression, Selector, Circuit, ErrorFront},
@@ -115,8 +115,8 @@ impl<F: PrimeField, const RANGE: usize> RangeCheckConfig<F, RANGE> {
 fn main() {
     const RANGE: usize = 10;
     let circuit = MyCircuit::<TermField, RANGE> {value: Value::known(TermField::from(5).into())};
-
-    ExtractingAssignment::run(&circuit, "RangeCheck", &[]).unwrap();
+    let prover = LeanDelegatingProver::new("RangeCheck".to_string(), vec![]);
+    prover.run(&circuit).unwrap();
 }
 
 //     #[test]

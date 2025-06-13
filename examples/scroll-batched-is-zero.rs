@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use halo2_extr::{extraction::ExtractingAssignment, field::TermField, scroll::gadgets::batched_is_zero::{BatchedIsZeroChip, BatchedIsZeroConfig}};
+use halo2_extr::{delegating_prover::DelegatingProver, field::TermField, lean_delegating_prover::LeanDelegatingProver, scroll::gadgets::batched_is_zero::{BatchedIsZeroChip, BatchedIsZeroConfig}};
 use halo2_proofs::{
     circuit::{Layouter, SimpleFloorPlanner, Value},
     plonk::{Advice, Circuit, Column, ConstraintSystem, ErrorFront, FirstPhase, Selector},
@@ -107,5 +107,6 @@ fn main() {
         expect_is_zero: Some(true),
         _marker: PhantomData,
     };
-    ExtractingAssignment::run(&circuit, "BatchedIsZero", &[]).unwrap();
+    let prover = LeanDelegatingProver::new("BatchedIsZero".to_string(), vec![]);
+    prover.run(&circuit).unwrap();
 }

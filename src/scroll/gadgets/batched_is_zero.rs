@@ -135,7 +135,7 @@ impl<const N: usize> BatchedIsZeroChip<TermField, N> {
 
 #[cfg(test)]
 mod test {
-    use crate::extraction::ExtractingAssignment;
+    use crate::{delegating_prover::DelegatingProver, lean_delegating_prover::LeanDelegatingProver};
 
     use super::*;
     use halo2_proofs::{
@@ -245,6 +245,7 @@ mod test {
             expect_is_zero: Some(true),
             _marker: PhantomData,
         };
-        ExtractingAssignment::run(&circuit, "BatchedIsZero", &[]).unwrap();
+        let prover = LeanDelegatingProver::new("BatchedIsZero".to_string(), vec![]);
+        prover.run(&circuit).unwrap();
     }
 }

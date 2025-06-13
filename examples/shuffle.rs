@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, vec};
 
-use halo2_extr::{extraction::ExtractingAssignment, field::TermField};
+use halo2_extr::{delegating_prover::DelegatingProver, field::TermField, lean_delegating_prover::LeanDelegatingProver};
 use halo2_proofs::{
     arithmetic::Field,
     circuit::{Layouter, SimpleFloorPlanner, Value},
@@ -154,7 +154,14 @@ fn main() {
         shuffle_1,
     };
 
-    ExtractingAssignment::run(&circuit, "ShuffleExample", &["a1", "a2", "a3", "a4", "b1", "b2", "b3", "b4", "c1", "c2", "c3", "c4", "d1", "d2", "d3", "d4"]).unwrap();
+    let prover = LeanDelegatingProver::new(
+        "ShuffleExample".to_string(), 
+        ["a1", "a2", "a3", "a4", "b1", "b2", "b3", "b4", "c1", "c2", "c3", "c4", "d1", "d2", "d3", "d4"]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
+    );
+    prover.run(&circuit).unwrap();
 }
 
 #[test]

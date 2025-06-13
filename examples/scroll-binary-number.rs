@@ -1,4 +1,4 @@
-use halo2_extr::{extraction::ExtractingAssignment, field::TermField, scroll::gadgets::binary_number::{AsBits, BinaryNumberChip, BinaryNumberConfig}};
+use halo2_extr::{delegating_prover::DelegatingProver, field::TermField, lean_delegating_prover::LeanDelegatingProver, scroll::gadgets::binary_number::{AsBits, BinaryNumberChip, BinaryNumberConfig}};
 use halo2_proofs::{
     circuit::{Layouter, SimpleFloorPlanner},
     plonk::{Circuit, Column, ConstraintSystem, Fixed},
@@ -79,5 +79,6 @@ impl Circuit<TermField> for TestCircuit {
 
 fn main() {
     let circuit = TestCircuit {};
-    ExtractingAssignment::run(&circuit, "BinaryNumber", &[]).unwrap();
+    let prover = LeanDelegatingProver::new("BinaryNumber".to_string(), vec![]);
+    prover.run(&circuit).unwrap();
 }

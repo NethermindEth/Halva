@@ -223,7 +223,7 @@ mod test {
         plonk::Circuit,
     };
 
-    use crate::{extraction::ExtractingAssignment, field::TermField};
+    use crate::{delegating_prover::DelegatingProver, field::TermField, lean_delegating_prover::LeanDelegatingProver};
 
     use super::*;
 
@@ -312,6 +312,7 @@ mod test {
     #[test]
     fn test_circuit() {
         let circuit = TestCircuit {};
-        ExtractingAssignment::run(&circuit, "BinaryNumber", &[]).unwrap();
+        let prover = LeanDelegatingProver::new("BinaryNumber".to_string(), vec![]);
+        prover.run(&circuit).unwrap();
     }
 }
