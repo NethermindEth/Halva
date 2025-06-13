@@ -9,8 +9,6 @@ edition = "2021"
 unsafe-equality = []
 unsafe-ord = []
 unsafe-invert = []
-repr-text = []
-repr-number = []
 
 [dependencies]
 rand_core = { version = "0.6", default-features = false }

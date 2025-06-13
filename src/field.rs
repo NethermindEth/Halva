@@ -451,33 +451,12 @@ impl AsRef<[u8]> for TermFieldBytes {
 impl PrimeField for TermField {
     type Repr = TermFieldBytes;
 
-    #[cfg(all(feature = "repr-text", feature = "repr-number"))]
     fn from_repr(_repr: Self::Repr) -> CtOption<Self> {
-        compile_error!("features `halo2-extractor/repr-text` and `halo2-extractor/repr-number` are mutually exclusive");
-    }
-
-    #[cfg(not(any(feature = "repr-text", feature = "repr-number")))]
-    fn from_repr(_repr: Self::Repr) -> CtOption<Self> {        
-        panic!("from_repr requires either the repr-text flag or the repr-number feature to be enabled");
-    }
-
-    #[cfg(all(feature = "repr-number", not(feature = "repr-text")))]
-    fn from_repr(repr: Self::Repr) -> CtOption<Self> {
-        let x = BigUint::from_bytes_le(&repr.0.as_bytes());
-        CtOption::new(Self::from(x.to_str_radix(10)), Choice::from(1))
-    }
-
-    #[cfg(all(feature = "repr-text", not(feature = "repr-number")))]
-    fn from_repr(repr: Self::Repr) -> CtOption<Self> {
-        CtOption::new(Self::Expr(repr.0), Choice::from(1))
+        unimplemented!("from_repr not implemented for TermField")
     }
 
     fn to_repr(&self) -> Self::Repr {
-        #[cfg(not(feature = "repr-text"))]
-        unimplemented!("to_repr requires the repr-text feature");
-        
-        #[cfg(feature = "repr-text")]
-        TermFieldBytes(self.to_expr())
+        unimplemented!("to_repr not implemented for TermField");
     }
 
     fn is_odd(&self) -> Choice {
