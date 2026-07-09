@@ -713,8 +713,13 @@ pub fn print_preamble(namespace: &str, symbol_names: &[&str], cs: &ConstraintSys
     println!("  (2^S * T = P - 1) ∧");
     println!("  (∀ s' t': ℕ, 2^s' * t' = P - 1 → s' ≤ S)");
     
+    // `mult_gen` models halo2's Field::MULTIPLICATIVE_GENERATOR — a generator of
+    // the multiplicative group (ZMod P)ˣ, i.e. an element of order P - 1. The
+    // previous predicate `mult_gen ^ P = 1` was unsatisfiable for actual
+    // generators: by Fermat's little theorem g ^ P = g in ZMod P, so it forced
+    // mult_gen = 1 and made `isValid` unsatisfiable for real circuits.
     println!("def multiplicative_generator (P: ℕ) (mult_gen: ZMod P) : Prop :=");
-    println!("  mult_gen ^ P = 1");
+    println!("  orderOf mult_gen = P - 1");
     
     println!("structure Circuit (P: ℕ) (P_Prime: Nat.Prime P) where");
     println!("  Advice: ℕ → ℕ → ZMod P");
